@@ -26,4 +26,5 @@ fi
 
 # centre pane: a terminal for now (becomes the agent CLI host in M3)
 export TERM=foot
-exec neuros-comp -k -s "$@" -- foot
+# -d: server-side decorations -> foot draws no titlebar in the centre pane
+exec neuros-comp -k -s -d "$@" -- foot

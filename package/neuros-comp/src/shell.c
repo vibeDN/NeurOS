@@ -22,8 +22,8 @@
 #include "shell.h"
 
 static const float FRAME_COLOR[4] = {0.04f, 0.04f, 0.04f, 1.0f};  /* border */
-static const float PANE_TINT[4] = {0.0f, 0.0f, 0.0f, 0.16f};      /* wash */
-static const float TEXT_COLOR[4] = {0.06f, 0.06f, 0.06f, 1.0f};
+static const float PANE_TINT[4] = {0.0f, 0.0f, 0.0f, 0.22f};      /* wash */
+static const float TEXT_COLOR[4] = {0.05f, 0.05f, 0.05f, 1.0f};
 
 /* default wallpaper = Claude accent -> darker shade */
 static const float DEFAULT_TOP[4] = {0.851f, 0.463f, 0.341f, 1.0f};
@@ -102,9 +102,9 @@ textblock_render(struct ng_textblock *tb, const struct flf_font *font, const str
 	if (!r)
 		return;
 
-	/* cell size: fit the rendered grid into the box (90%), keep square cells */
-	int cw = (box->width * 9 / 10) / (r->cols > 0 ? r->cols : 1);
-	int ch = (box->height * 9 / 10) / (r->rows > 0 ? r->rows : 1);
+	/* cell size: fit the rendered grid into the box (~78%), keep square cells */
+	int cw = (box->width * 78 / 100) / (r->cols > 0 ? r->cols : 1);
+	int ch = (box->height * 78 / 100) / (r->rows > 0 ? r->rows : 1);
 	int cell = cw < ch ? cw : ch;
 	if (cell < 1)
 		cell = 1;
@@ -243,11 +243,11 @@ ng_shell_layout(struct ng_shell *shell, int width, int height)
 		margin = 6;
 	int gap = margin;
 
-	shell->frame_t = height / 150;
-	if (shell->frame_t < 4)
-		shell->frame_t = 4;
-	if (shell->frame_t > 22)
-		shell->frame_t = 22;
+	shell->frame_t = height / 80;
+	if (shell->frame_t < 6)
+		shell->frame_t = 6;
+	if (shell->frame_t > 26)
+		shell->frame_t = 26;
 
 	int strip_h = height * 3 / 100;
 	if (strip_h < 16)

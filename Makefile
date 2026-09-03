@@ -40,6 +40,11 @@ savedefconfig:
 clean:
 	$(BRMAKE) clean
 
+# force-rebuild just the compositor + reassemble the image (local pkg sync
+# detection is unreliable while iterating on package/neuros-comp/src)
+comp:
+	nice -n 15 ionice -c3 $(BRMAKE) neuros-comp-dirclean all
+
 distclean:
 	rm -rf $(O)
 
