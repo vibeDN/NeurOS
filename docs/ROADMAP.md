@@ -100,8 +100,41 @@ Vosk (Kaldi, streaming, per language):
 - medium/large whisper, and vosk-large: not on device.
 - Piper TTS for reference: ~20-65 MB/voice, ~50-150 MB RAM, faster than realtime.
 
+## Storage layout (decided)
+
+**Phone (target 2):** image-based read-only root + one persistent data partition.
+
+| mount        | fs / mechanism                          | notes                          |
+|--------------|-----------------------------------------|--------------------------------|
+| `/`          | **erofs**, read-only (lz4hc)            | shipped in OTA image, reflashed wholesale |
+| `/etc`       | **overlayfs** (lower=image, upper=data) | machine-id, ssh keys, wifi creds persist |
+| `/var`       | dir on data partition (bring-up)        | real logs to chase bugs; -> tmpfs later |
+| `/home`, `/opt` | dirs on data partition, rw           | agent self-updates -> `/opt/neuros/agents/<a>`; memory -> `/home/<a>/memory` |
+| swap         | 4 GB zram                               |                                |
+
+- data partition fs: **f2fs** (flash-optimized, power-loss safe - same as Android `/data`).
+- mounts pivoted by a tiny initramfs.
+- payoff: OTA = reflash erofs (data survives); battery death mid-write can't
+  corrupt root; no root fsck; factory reset = wipe data partition.
+- Buildroot pieces all present: `BR2_TARGET_ROOTFS_EROFS`, `BR2_PACKAGE_F2FS_TOOLS`,
+  `CONFIG_OVERLAY_FS` (already in our kernel config).
+
+**x86_64 dev:** plain rw ext4 for M0. Bring the erofs+overlay layout to x86 at
+**M1** to shake out the initramfs/overlay pivot before the phone. Default in
+`neuros_sweet_defconfig` from M5.
+
+## MLT / NeuroCut packaging (resolved)
+
+- Buildroot has **no `mlt` package** -> we add `package/mlt/` to this BR2_EXTERNAL.
+- **No SWIG / python bindings needed**: NeuroCut shells out to the `melt` CLI +
+  `ffmpeg` + `fc-cache` (verified in `neurocut/render.py`, `probe.py`). It never
+  imports `mlt7`. So the package is **CLI-only**.
+- Modules to enable: core + `avformat` (ffmpeg [BR pkg]) + `pango` (pango/cairo/
+  fontconfig [all BR pkgs]) for titles. Disable qt6/frei0r/gtk/opengl/rtaudio/sdl.
+- mcp-paint: `skia-python` has aarch64 wheels -> thin wheel-fetch package or a
+  runtime venv. numpy is a BR package. Not a blocker.
+
 ## Open questions
 
-- Writable storage layout: read-only squashfs root + overlayfs, vs plain ext4.
-  The AI CLIs self-update and write memory, so at least `/opt` + `/home` writable.
-- MLT python bindings in Buildroot (`BR2_PACKAGE_MLT` + swig/python) - verify.
+- erofs vs squashfs for the ro root - leaning erofs (Android-native, better
+  random read on flash, mainline). Confirm.
