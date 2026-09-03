@@ -117,6 +117,7 @@ cage_sources = [
   'cage.c',
   'figlet.c',
   'idle_inhibit_v1.c',
+  'ipc.c',
   'output.c',
   'seat.c',
   'shell.c',
@@ -130,6 +131,7 @@ cage_headers = [
                  configuration: conf_data),
   'figlet.h',
   'idle_inhibit_v1.h',
+  'ipc.h',
   'output.h',
   'seat.h',
   'server.h',
@@ -153,6 +155,12 @@ executable(
     xkbcommon,
     math,
   ],
+  install: true,
+)
+
+executable(
+  'neuros-ctl',
+  'neuros-ctl.c',
   install: true,
 )
 

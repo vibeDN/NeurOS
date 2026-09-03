@@ -52,6 +52,7 @@
 #endif
 
 #include "idle_inhibit_v1.h"
+#include "ipc.h"
 #include "output.h"
 #include "seat.h"
 #include "server.h"
@@ -379,6 +380,8 @@ main(int argc, char *argv[])
 		goto end;
 	}
 
+	server.ipc = ng_ipc_create(&server); /* non-fatal if it fails */
+
 	struct wlr_compositor *compositor = wlr_compositor_create(server.wl_display, 6, server.renderer);
 	if (!compositor) {
 		wlr_log(WLR_ERROR, "Unable to create the wlroots compositor");
@@ -645,6 +648,7 @@ end:
 		wl_event_source_remove(sigchld_source);
 	}
 	seat_destroy(server.seat);
+	ng_ipc_destroy(server.ipc);
 	ng_shell_destroy(server.shell);
 	/* This function is not null-safe, but we only ever get here
 	   with a proper wl_display. */

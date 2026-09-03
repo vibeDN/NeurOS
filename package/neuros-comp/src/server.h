@@ -41,6 +41,7 @@ struct cg_server {
 
 	struct wlr_scene *scene;
 	struct ng_shell *shell; /* NeurOS 4-zone shell chrome */
+	struct ng_ipc *ipc;     /* NeurOS control socket */
 	/* Includes disabled outputs; depending on the output_mode
 	 * some outputs may be disabled. */
 	struct wl_list outputs; // cg_output::link
