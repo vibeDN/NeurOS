@@ -19,12 +19,9 @@ export WLR_RENDERER="${WLR_RENDERER:-gles2}"
 export LIBGL_ALWAYS_SOFTWARE=1
 export GALLIUM_DRIVER="${GALLIUM_DRIVER:-llvmpipe}"
 
-# libseat: seatd daemon if present, else the builtin (root on the VT) backend
-if [ -S /run/seatd.sock ]; then
-	export LIBSEAT_BACKEND="${LIBSEAT_BACKEND:-seatd}"
-else
-	export LIBSEAT_BACKEND="${LIBSEAT_BACKEND:-builtin}"
-fi
+# libseat: builtin backend (we run as root); it embeds seatd in-process, which
+# shows as a second short-lived neuros-comp - expected, not a duplicate compositor
+export LIBSEAT_BACKEND="${LIBSEAT_BACKEND:-builtin}"
 
 export TERM=foot
 

@@ -1,5 +1,4 @@
 enable systemd-networkd.service
 enable systemd-resolved.service
 enable sshd.service
-enable seatd.service
 enable neuros-comp.service

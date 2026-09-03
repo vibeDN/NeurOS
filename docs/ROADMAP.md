@@ -203,12 +203,17 @@ minimal Android property/HAL container (for camera). Packaged in this BR2_EXTERN
   `.flf` parser + GLES glyph atlas for the FIGlet panes; embedded VT in the
   center; on-screen photo/mic buttons; **lockscreen** (`ext-session-lock-v1` +
   `neuros-lock`).
-- [ ] **M3 - agent runtime** (`neuros-agentd`, Rust): spawn Claude Code on a
-  pty, render to the center VT, STT -> stdin, stdout -> markdown filter -> Piper,
-  status/tool events -> bottom pane. Prepend the **mandatory memory system
-  prompt** (`docs/agent-memory-prompt.md`) verbatim; memory at
-  `/home/claude/memory/{you,topics,area}`; signal end-of-session so the agent
-  runs its review-and-file pass. **aarch64 build target added here.**
+- [~] **M3 - agent runtime**: prototype working in the VM. `neuros-agentd`
+  (shell) runs the agent in a **tmux** session, `foot` in the centre pane
+  attaches to it; `tmux pipe-pane` -> `tts-filter` (markdown/ANSI stripped) ->
+  `/run/neuros/tts.txt`; `agent-status` classifies output -> `neuros-ctl status`
+  -> bottom pane (verified: mock agent -> "Working"). Compositor is now a systemd
+  service (`neuros-comp.service`, owns tty1, `Conflicts=getty@tty1`). `mock-agent`
+  stands in for the real CLI.
+  Next: Piper (M4) on the tts stream; real Claude Code in the image + the
+  mandatory memory prompt (`docs/agent-memory-prompt.md`) + `/home/claude/memory/
+  {you,topics,area}`; STT inject via `tmux send-keys`; Rustify once stable.
+  **aarch64 build target.**
 - [ ] **M4 - audio**: Piper packaged (ru `ruslan`, en `ryan`); whisper.cpp
   `small` f16 packaged; vosk-small VAD; mic button <-> always-listen stream.
 - [ ] **M5 - aarch64 / sweet target**: `neuros_sweet_defconfig`; downstream
