@@ -8,36 +8,38 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 O="$ROOT/output"
 LOG="$O/build.log"
 
-total=$(make -s -C "$ROOT/buildroot" O="$O" BR2_EXTERNAL="$ROOT" printvars VARS=PACKAGES 2>/dev/null \
-        | tr ' ' '\n' | sed 's/^PACKAGES=//' | grep -c '[a-z]')
+# Buildroot has no reliable total-work number, and printvars PACKAGES undercounts.
+# So: during the FIRST build just show raw counts. After a build finishes we
+# stash the true >>> step total in .build-steps-baseline and show a real bar.
+BASELINE="$O/.build-steps-baseline"
 
-done=$(find "$O/build" -maxdepth 2 -name '.stamp_*_installed' 2>/dev/null \
+pkgs=$(find "$O/build" -maxdepth 2 -name '.stamp_*_installed' 2>/dev/null \
        | sed 's#.*/build/##; s#/\.stamp.*##' | sort -u | grep -c '.' || true)
-
 steps=$(grep -c '>>>' "$LOG" 2>/dev/null || echo 0)
 cur=$(grep '>>>' "$LOG" 2>/dev/null | tail -1 | sed 's/.*>>> //; s/\x1b\[[0-9;]*m//g')
-
-# printvars PACKAGES undercounts (skips a few implicit/virtual packages that
-# still emit install stamps), so done can exceed total near the end. Clamp.
-[ "$done" -gt "$total" ] && total="$done"
-pct=$(( total > 0 ? done * 100 / total : 0 ))
-[ "$pct" -gt 100 ] && pct=100
-filled=$(( pct / 5 ))
-bar=$(printf '%*s' "$filled" '' | tr ' ' '#')$(printf '%*s' $((20 - filled)) '' | tr ' ' '.')
+kernel_done=$([ -f "$O/images/bzImage" ] && echo yes || echo no)
 
 running=false
 pgrep -f 'nice.*make build' >/dev/null 2>&1 && running=true
 pgrep -f 'buildroot.*BR2_EXTERNAL' >/dev/null 2>&1 && running=true
 
 if [ -f "$O/images/disk.img" ]; then
+	[ -n "$steps" ] && echo "$steps" > "$BASELINE"
 	echo "[####################] DONE - output/images/disk.img"
-elif $running; then
-	case "$cur" in
-		linux*|*rootfs*|*genimage*|*"Generating"*)
-			echo "[$bar] ~${pct}% pkgs done, now on the slow tail  |  ${steps} steps  |  now: ${cur}" ;;
-		*)
-			echo "[$bar] ~${pct}% (${done} pkgs)  |  ${steps} steps  |  now: ${cur}" ;;
-	esac
+	exit 0
+fi
+
+if [ -f "$BASELINE" ]; then
+	tot=$(cat "$BASELINE"); pct=$(( steps * 100 / (tot>0?tot:1) )); [ "$pct" -gt 99 ] && pct=99
+	filled=$(( pct / 5 ))
+	bar=$(printf '%*s' "$filled" '' | tr ' ' '#')$(printf '%*s' $((20-filled)) '' | tr ' ' '.')
+	pre="[$bar] ~${pct}%  ${steps}/${tot} steps"
 else
-	echo "[$bar] build not running (stopped or finished); no disk.img yet"
+	pre="first build (no baseline yet):  ${pkgs} pkgs, ${steps} steps, kernel=${kernel_done}"
+fi
+
+if $running; then
+	echo "${pre}  |  now: ${cur}"
+else
+	echo "${pre}  |  build NOT running - check output/build.log"
 fi
