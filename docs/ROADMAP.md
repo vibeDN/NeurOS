@@ -222,10 +222,13 @@ minimal Android property/HAL container (for camera). Packaged in this BR2_EXTERN
   - **Verified end to end**: piper synth "what is the capital of France" -> WAV
     -> `neuros-stt` -> whisper transcribes "What is the capital of France?" ->
     injected into the agent session -> agent responds.
-  - Perf caveat: `GGML_NATIVE=OFF` -> generic x86-64, no AVX -> whisper RTF ~15x
-    in the VM. Fine for dev; tune `-march` / dotprod for the SM6150 at M5.
-  Next: real mic capture (`arecord`) + VAD (`whisper-vad-speech-segments`, or
-  vosk-small); buffer whole responses for TTS; mic button in the shell.
+  - **whisper `small` RTF ~2.3x in the VM** after enabling ggml AVX2/FMA/F16C
+    (was ~15x on generic x86-64: 31s -> 6.9s for a 3s clip). openblas needs a
+    pinned x86 CPU variant - skipped for x86, revisit on ARM at M5.
+  - **TTS response buffering done**: agentd accumulates the reply and speaks it
+    once on status->Idle (was line-by-line), `is_prose()` drops prompt/TUI noise.
+  Next: real mic capture (`arecord`) + VAD (`whisper-vad-speech-segments` or
+  vosk-small); mic button in the shell wired to it.
 - [ ] **M5 - aarch64 / sweet target**: `neuros_sweet_defconfig`; downstream
   kernel package; `libhybris` + `android-headers` packages; firmware manifest;
   own-GPT + A/B layout; our AVB key; swupdate.
