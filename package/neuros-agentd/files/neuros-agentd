@@ -43,9 +43,32 @@ neuros-ctl status Idle 2>/dev/null || true
 # tee the pane; -O = also capture existing scrollback
 tmux pipe-pane -t "$TMUX_SESSION" -O "cat >> '$RAW'"
 
-# process the stream: TTS filter + status classification
+: "${TTS_VOICE:=/usr/share/piper-voices/default.onnx}"
+[ -r "$TTS_VOICE" ] || TTS_VOICE=""
+
+speak() {
+	[ -n "$TTS_VOICE" ] || return 0
+	command -v piper >/dev/null 2>&1 || return 0
+	printf '%s\n' "$1" | piper -q -m "$TTS_VOICE" --output-raw 2>/dev/null |
+		aplay -q -r 22050 -f S16_LE -c 1 -t raw - 2>/dev/null
+}
+
+# process the stream: TTS filter + status classification + speech
 tail -n0 -F "$RAW" 2>/dev/null | while IFS= read -r line; do
-	printf '%s\n' "$line" | /usr/lib/neuros/tts-filter >> "$TTS"
+	clean=$(printf '%s\n' "$line" | /usr/lib/neuros/tts-filter)
+	printf '%s\n' "$clean" >> "$TTS"
+
+	# only speak prose: has a lowercase letter, reasonably long, not a prompt/TUI line
+	case "$clean" in
+	*[a-z]*)
+		if [ "${#clean}" -ge 12 ] && \
+		   [ "${clean#*"? for shortcuts"}" = "$clean" ] && \
+		   [ "${clean#>}" = "$clean" ]; then
+			speak "$clean" &
+		fi
+		;;
+	esac
+
 	st=$(printf '%s\n' "$line" | /usr/lib/neuros/agent-status)
 	[ -n "$st" ] && neuros-ctl status "$st" 2>/dev/null || true
 done &

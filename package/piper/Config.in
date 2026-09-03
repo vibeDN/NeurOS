@@ -1,0 +1,13 @@
+config BR2_PACKAGE_PIPER
+	bool "piper (TTS)"
+	depends on BR2_x86_64 || BR2_aarch64
+	depends on BR2_TOOLCHAIN_USES_GLIBC
+	help
+	  Piper - fast local neural text-to-speech. Prebuilt upstream release
+	  (bundles onnxruntime + espeak-ng). Voice models (.onnx) are shipped
+	  separately.
+
+	  https://github.com/rhasspy/piper
+
+comment "piper needs a glibc x86_64/aarch64 toolchain"
+	depends on !((BR2_x86_64 || BR2_aarch64) && BR2_TOOLCHAIN_USES_GLIBC)

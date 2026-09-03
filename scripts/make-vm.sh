@@ -32,7 +32,7 @@ VBoxManage modifyvm "$VM" \
 	--memory 4096 --cpus 4 --firmware bios \
 	--graphicscontroller vmsvga --vram 128 --accelerate3d on \
 	--nic1 nat --nictype1 virtio \
-	--audio-driver none \
+	--audio-driver none --audio-controller hda --audio-out on \
 	--uart1 0x3f8 4 --uartmode1 file "$ROOT/output/serial.log"
 VBoxManage storagectl "$VM" --name SATA --add sata --controller IntelAhci --portcount 2
 VBoxManage storageattach "$VM" --storagectl SATA --port 0 --device 0 --type hdd --medium "$VDI"

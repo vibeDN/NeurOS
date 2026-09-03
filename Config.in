@@ -2,5 +2,7 @@ menu "NeurOS packages"
 
 source "$BR2_EXTERNAL_NEUROS_PATH/package/neuros-comp/Config.in"
 source "$BR2_EXTERNAL_NEUROS_PATH/package/neuros-agentd/Config.in"
+source "$BR2_EXTERNAL_NEUROS_PATH/package/piper/Config.in"
+source "$BR2_EXTERNAL_NEUROS_PATH/package/piper-voices/Config.in"
 
 endmenu

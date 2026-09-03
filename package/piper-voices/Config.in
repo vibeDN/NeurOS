@@ -1,0 +1,6 @@
+config BR2_PACKAGE_PIPER_VOICES
+	bool "piper-voices (ryan + ruslan, medium)"
+	depends on BR2_PACKAGE_PIPER
+	help
+	  Piper voice models: en_US-ryan-medium and ru_RU-ruslan-medium
+	  (male, ~63 MB each). Installed to /usr/share/piper-voices/.

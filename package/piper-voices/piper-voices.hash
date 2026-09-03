@@ -1,0 +1,5 @@
+# Locally computed (huggingface.co/rhasspy/piper-voices)
+sha256  44034c056cb15681b2ad494307c7f3f2e4499d1253c700c711fa0a4607ffe78d  en_US-ryan-medium.onnx.json
+sha256  abf4c274862564ed647ba0d2c47f8ee7c9b717d27bdad9219100eb310db4047a  en_US-ryan-medium.onnx
+sha256  72a5f88e0b20928064eb45d88e1daa21f8af62d18613580d32cbb4aed48dcf7f  ru_RU-ruslan-medium.onnx
+sha256  706a4fb17bc304abd07809b552deae615e64dcbffbfbd09854ba37ca59e88117  ru_RU-ruslan-medium.onnx.json
