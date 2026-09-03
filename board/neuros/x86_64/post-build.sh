@@ -14,3 +14,7 @@ SSHD="$TARGET_DIR/etc/ssh/sshd_config"
 if [ -f "$SSHD" ] && ! grep -q '^Include /etc/ssh/sshd_config.d/' "$SSHD"; then
 	sed -i '1i Include /etc/ssh/sshd_config.d/*.conf' "$SSHD"
 fi
+
+# NeurOS owns tty1 (compositor) - the text-console font/keymap setup only fails
+mkdir -p "$TARGET_DIR/etc/systemd/system"
+ln -sf /dev/null "$TARGET_DIR/etc/systemd/system/systemd-vconsole-setup.service"
