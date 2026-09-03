@@ -14,9 +14,10 @@ BR2_TOOLCHAIN_EXTERNAL_BOOTLIN_X86_64_GLIBC_STABLE=y
 BR2_INIT_SYSTEMD=y
 BR2_ROOTFS_DEVICE_CREATION_DYNAMIC_EUDEV=y
 
-# Locale: glibc 2.41 (Bootlin) ships C.UTF-8 built in - just point LANG at it
-# (overlay/etc/locale.conf + neuros-session). Generating locales here would drag
-# in host-localedef == a full glibc git clone, so we don't.
+# Locale: foot/fcft hard-require a real UTF-8 locale and this glibc has no
+# built-in C.UTF-8. Generating it pulls host-localedef (a one-time glibc source
+# fetch, then cached).
+BR2_GENERATE_LOCALE="C.UTF-8"
 
 # System identity
 BR2_TARGET_GENERIC_HOSTNAME="neuros"
