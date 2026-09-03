@@ -214,7 +214,8 @@ minimal Android property/HAL container (for camera). Packaged in this BR2_EXTERN
   mandatory memory prompt (`docs/agent-memory-prompt.md`) + `/home/claude/memory/
   {you,topics,area}`; STT inject via `tmux send-keys`; Rustify once stable.
   **aarch64 build target.**
-- [x] **M4 - audio**: full voice loop works in the VM.
+- [x] **M4 - audio**: full voice loop works in the VM (TTS buffered, STT + mic
+  listener + VAD, whisper 'small' at ~2x RTF).
   - **TTS**: `piper` (prebuilt) + `piper-voices` (en ryan, ru ruslan). Synth
     valid WAV; `agentd` speaks filtered prose via `piper --output-raw | aplay`.
   - **STT**: `whisper-cpp` built from source (+OpenBLAS) + `whisper-model`
@@ -227,8 +228,13 @@ minimal Android property/HAL container (for camera). Packaged in this BR2_EXTERN
     pinned x86 CPU variant - skipped for x86, revisit on ARM at M5.
   - **TTS response buffering done**: agentd accumulates the reply and speaks it
     once on status->Idle (was line-by-line), `is_prose()` drops prompt/TUI noise.
-  Next: real mic capture (`arecord`) + VAD (`whisper-vad-speech-segments` or
-  vosk-small); mic button in the shell wired to it.
+  - **Mic listener done** (`neuros-listen`): `arecord` window -> `whisper-cli
+    --vad` (Silero v5) -> `tmux send-keys`. `neuros-mic on|off|toggle` flag.
+    Verified: silence -> no injection (VAD works); whisper+VAD on real speech
+    transcribes exactly. Only the live-mic capture link is unverified (no mic in
+    the headless VM). Coarse fixed-window recording; streaming endpointing later.
+  Next: on-screen mic/camera buttons in the shell (input hit-testing in shell.c);
+  or a hardware key -> `neuros-mic` via seat.c.
 - [ ] **M5 - aarch64 / sweet target**: `neuros_sweet_defconfig`; downstream
   kernel package; `libhybris` + `android-headers` packages; firmware manifest;
   own-GPT + A/B layout; our AVB key; swupdate.
