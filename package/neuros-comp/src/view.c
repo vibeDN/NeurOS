@@ -19,6 +19,7 @@
 #include "output.h"
 #include "seat.h"
 #include "server.h"
+#include "shell.h"
 #include "view.h"
 #if CAGE_HAS_XWAYLAND
 #include "xwayland.h"
@@ -52,15 +53,6 @@ view_activate(struct cg_view *view, bool activate)
 	view->impl->activate(view, activate);
 }
 
-static bool
-view_extends_output_layout(struct cg_view *view, struct wlr_box *layout_box)
-{
-	int width, height;
-	view->impl->get_geometry(view, &width, &height);
-
-	return (layout_box->height < height || layout_box->width < width);
-}
-
 static void
 view_maximize(struct cg_view *view, struct wlr_box *layout_box)
 {
@@ -74,31 +66,26 @@ view_maximize(struct cg_view *view, struct wlr_box *layout_box)
 	view->impl->maximize(view, layout_box->width, layout_box->height);
 }
 
-static void
-view_center(struct cg_view *view, struct wlr_box *layout_box)
-{
-	int width, height;
-	view->impl->get_geometry(view, &width, &height);
-
-	view->lx = (layout_box->width - width) / 2;
-	view->ly = (layout_box->height - height) / 2;
-
-	if (view->scene_tree) {
-		wlr_scene_node_set_position(&view->scene_tree->node, view->lx, view->ly);
-	}
-}
-
 void
 view_position(struct cg_view *view)
 {
 	struct wlr_box layout_box;
 	wlr_output_layout_get_box(view->server->output_layout, NULL, &layout_box);
 
-	if (view_is_primary(view) || view_extends_output_layout(view, &layout_box)) {
-		view_maximize(view, &layout_box);
-	} else {
-		view_center(view, &layout_box);
+	/* NeurOS: the client lives inside the shell's centre pane, inset by the
+	 * frame border. Fall back to the full output before the shell is laid out. */
+	struct wlr_box target = layout_box;
+	struct ng_shell *shell = view->server->shell;
+	if (shell && shell->center_box.width > 2 * NG_FRAME_PX && shell->center_box.height > 2 * NG_FRAME_PX) {
+		target = (struct wlr_box){
+			.x = shell->center_box.x + NG_FRAME_PX,
+			.y = shell->center_box.y + NG_FRAME_PX,
+			.width = shell->center_box.width - 2 * NG_FRAME_PX,
+			.height = shell->center_box.height - 2 * NG_FRAME_PX,
+		};
 	}
+
+	view_maximize(view, &target);
 }
 
 void

@@ -40,6 +40,7 @@ struct cg_server {
 	struct wlr_scene_output_layout *scene_output_layout;
 
 	struct wlr_scene *scene;
+	struct ng_shell *shell; /* NeurOS 4-zone shell chrome */
 	/* Includes disabled outputs; depending on the output_mode
 	 * some outputs may be disabled. */
 	struct wl_list outputs; // cg_output::link

@@ -118,6 +118,7 @@ cage_sources = [
   'idle_inhibit_v1.c',
   'output.c',
   'seat.c',
+  'shell.c',
   'view.c',
   'xdg_shell.c',
 ]
@@ -130,6 +131,7 @@ cage_headers = [
   'output.h',
   'seat.h',
   'server.h',
+  'shell.h',
   'view.h',
   'xdg_shell.h',
 ]

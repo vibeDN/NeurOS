@@ -70,6 +70,12 @@ BR2_PACKAGE_LIBINPUT=y
 BR2_PACKAGE_LIBXKBCOMMON=y
 BR2_PACKAGE_CAGE=y
 BR2_PACKAGE_NEUROS_COMP=y
+# terminal for the centre pane (also brings fcft/freetype/fontconfig, reused
+# for the shell's small monospace text)
+BR2_PACKAGE_FOOT=y
+BR2_PACKAGE_FOOT_THEMES=y
+BR2_PACKAGE_DEJAVU=y
+BR2_PACKAGE_DEJAVU_SANS_MONO=y
 
 # Base userland for development / bring-up
 BR2_PACKAGE_OPENSSH=y

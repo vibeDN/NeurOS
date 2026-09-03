@@ -37,6 +37,7 @@
 #include "output.h"
 #include "seat.h"
 #include "server.h"
+#include "shell.h"
 #include "view.h"
 #if CAGE_HAS_XWAYLAND
 #include "xwayland.h"
@@ -178,6 +179,14 @@ void
 handle_output_layout_change(struct wl_listener *listener, void *data)
 {
 	struct cg_server *server = wl_container_of(listener, server, output_layout_change);
+
+	if (server->shell) {
+		struct wlr_box box;
+		wlr_output_layout_get_box(server->output_layout, NULL, &box);
+		if (!wlr_box_empty(&box)) {
+			ng_shell_layout(server->shell, box.width, box.height);
+		}
+	}
 
 	view_position_all(server);
 	update_output_manager_config(server);

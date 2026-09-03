@@ -1,0 +1,21 @@
+#!/bin/sh
+# Start the NeurOS compositor on the seat. Invoked on tty1 (see
+# /etc/profile.d/neuros-session.sh). Kept minimal for M2 bring-up; a proper
+# systemd seat service replaces this later.
+set -e
+
+export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/0}"
+mkdir -p "$XDG_RUNTIME_DIR"
+chmod 700 "$XDG_RUNTIME_DIR"
+
+# software GL (llvmpipe) - the dev VM has no real 3D
+export WLR_RENDERER="${WLR_RENDERER:-gles2}"
+export LIBGL_ALWAYS_SOFTWARE=1
+export GALLIUM_DRIVER="${GALLIUM_DRIVER:-llvmpipe}"
+
+# libseat: use the builtin backend when running as root with no seatd/logind
+export LIBSEAT_BACKEND="${LIBSEAT_BACKEND:-seatd}"
+
+# centre pane: a terminal for now (becomes the agent CLI host in M3)
+export TERM=foot
+exec neuros-comp "$@" -- foot

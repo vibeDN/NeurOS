@@ -55,6 +55,7 @@
 #include "output.h"
 #include "seat.h"
 #include "server.h"
+#include "shell.h"
 #include "view.h"
 #include "xdg_shell.h"
 #if CAGE_HAS_XWAYLAND
@@ -361,6 +362,13 @@ main(int argc, char *argv[])
 
 	server.scene_output_layout = wlr_scene_attach_output_layout(server.scene, server.output_layout);
 
+	server.shell = ng_shell_create(&server);
+	if (!server.shell) {
+		wlr_log(WLR_ERROR, "Unable to create the NeurOS shell");
+		ret = 1;
+		goto end;
+	}
+
 	struct wlr_compositor *compositor = wlr_compositor_create(server.wl_display, 6, server.renderer);
 	if (!compositor) {
 		wlr_log(WLR_ERROR, "Unable to create the wlroots compositor");
@@ -627,6 +635,7 @@ end:
 		wl_event_source_remove(sigchld_source);
 	}
 	seat_destroy(server.seat);
+	ng_shell_destroy(server.shell);
 	/* This function is not null-safe, but we only ever get here
 	   with a proper wl_display. */
 	wl_display_destroy(server.wl_display);
