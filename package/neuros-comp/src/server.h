@@ -65,6 +65,7 @@ struct cg_server {
 	bool xdg_decoration;
 	bool allow_vt_switch;
 	bool return_app_code;
+	bool keep_alive; /* NeurOS: don't exit when the primary client exits */
 	bool terminated;
 	enum wlr_log_importance log_level;
 };

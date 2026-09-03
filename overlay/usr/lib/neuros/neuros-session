@@ -18,4 +18,4 @@ export LIBSEAT_BACKEND="${LIBSEAT_BACKEND:-seatd}"
 
 # centre pane: a terminal for now (becomes the agent CLI host in M3)
 export TERM=foot
-exec neuros-comp "$@" -- foot
+exec neuros-comp -k "$@" -- foot

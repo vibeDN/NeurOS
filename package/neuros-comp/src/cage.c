@@ -94,6 +94,12 @@ sigchld_handler(int fd, uint32_t mask, void *data)
 		wlr_log(WLR_DEBUG, "Connection closed by server");
 	}
 
+	if (server->keep_alive) {
+		/* NeurOS: the shell stays up; agentd (the client) may respawn. */
+		wlr_log(WLR_INFO, "Primary client exited; keeping the compositor alive (-k)");
+		return 0;
+	}
+
 	server->return_app_code = true;
 	server_terminate(server);
 	return 0;
@@ -230,6 +236,7 @@ usage(FILE *file, const char *cage)
 		" -d\t Don't draw client side decorations, when possible\n"
 		" -D\t Enable debug logging\n"
 		" -h\t Display this help message\n"
+		" -k\t Keep the compositor running after the primary client exits\n"
 		" -m extend Extend the display across all connected outputs (default)\n"
 		" -m last Use only the last connected output\n"
 		" -s\t Allow VT switching\n"
@@ -243,7 +250,7 @@ static bool
 parse_args(struct cg_server *server, int argc, char *argv[])
 {
 	int c;
-	while ((c = getopt(argc, argv, "dDhm:sv")) != -1) {
+	while ((c = getopt(argc, argv, "dDhkm:sv")) != -1) {
 		switch (c) {
 		case 'd':
 			server->xdg_decoration = true;
@@ -254,6 +261,9 @@ parse_args(struct cg_server *server, int argc, char *argv[])
 		case 'h':
 			usage(stdout, argv[0]);
 			return false;
+		case 'k':
+			server->keep_alive = true;
+			break;
 		case 'm':
 			if (strcmp(optarg, "last") == 0) {
 				server->output_mode = CAGE_MULTI_OUTPUT_MODE_LAST;
