@@ -148,6 +148,12 @@ frame chrome, the on-screen buttons, and the lockscreen. Milestones: M2 = the
 static 4-zone shell + VT + FIGlet panes; M3 = agentd pty wiring; M4 = mic
 button <-> stream; M7 = camera pane + mascot animation + `camera.*` tool.
 
+**Wallpaper:** per-agent vertical 2-stop gradient, `logo colour -> darker shade
+of the same colour`, GLES shader lerp. Full preset table is in the brief
+(`MEMORY.md`). Note: the ChatGPT agent uses **Codex purple** (`#AB68FF`), *not*
+black - black is Kimi's colour, they must stay distinct. Gemini is the one
+special case (white base + 4-stop Google hue band), also in the brief.
+
 ## What we harvest from sweet's stock firmware / LineageOS
 
 Halium-style, so more is reused than a pure-mainline build:
