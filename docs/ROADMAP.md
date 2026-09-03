@@ -214,12 +214,13 @@ minimal Android property/HAL container (for camera). Packaged in this BR2_EXTERN
   mandatory memory prompt (`docs/agent-memory-prompt.md`) + `/home/claude/memory/
   {you,topics,area}`; STT inject via `tmux send-keys`; Rustify once stable.
   **aarch64 build target.**
-- [~] **M4 - audio**: **Piper packaged** (prebuilt upstream release, bundles
-  onnxruntime/espeak-ng) + `piper-voices` (en_US-ryan-medium, ru_RU-ruslan-medium,
-  male). `agentd` pipes filtered prose -> `piper --output-raw` -> `aplay`. Kernel
-  + VM get HDA sound. *(building)*
-  Next: verify piper produces audio in the VM; buffer whole responses (not
-  line-by-line); whisper.cpp `small` f16 packaging; vosk-small VAD; mic button.
+- [~] **M4 - audio**: **Piper works in the VM** - `piper` (prebuilt, bundles
+  onnxruntime/espeak-ng) + `piper-voices` (en_US-ryan-medium, ru_RU-ruslan-medium).
+  Both voices synth valid WAV, RTF ~0.04 on x86. HDA sound card up. `agentd`
+  pipes filtered prose -> `piper --output-raw` -> `aplay` (PCM device opens;
+  actual playback unverifiable headless).
+  Next: buffer whole responses instead of line-by-line; whisper.cpp `small` f16
+  packaging (STT); vosk-small VAD; mic button; wire STT -> `tmux send-keys`.
 - [ ] **M5 - aarch64 / sweet target**: `neuros_sweet_defconfig`; downstream
   kernel package; `libhybris` + `android-headers` packages; firmware manifest;
   own-GPT + A/B layout; our AVB key; swupdate.
