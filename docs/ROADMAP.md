@@ -3,78 +3,189 @@
 ## Architecture decisions (locked)
 
 - **From-scratch Linux distro**, built with **Buildroot** (BR2_EXTERNAL = this repo).
-  Not an Android fork, not a Debian/Alpine/pmOS fork.
-- Target 1 (now): **x86_64**, runs in VirtualBox/QEMU. Development happens here
-  while the phone's bootloader unlock window is still closed (~2026-09-10).
-- Target 2 (later): **aarch64 / Redmi Note 10 Pro 4G "sweet"** (SM6150, Adreno 618;
-  8 GB RAM variant + 4 GB zram swap configured -> ~12 GB effective budget).
-- Init: **systemd** (logind seats/sessions for the compositor; unit management for
-  the agent runtime). Forces a glibc toolchain.
-- UI: our own **wlroots-based Wayland compositor** on DRM/KMS + GBM. FIGlet-style
-  block font for the big status text; normal monospace for everything else.
+  glibc + **systemd**. Not an Android fork, not a Debian/Alpine/pmOS fork.
+- **Hardware enablement is Halium-style** (like Droidian / Ubuntu Touch - still a
+  Linux distro, not Android): downstream Android kernel for sweet + vendor
+  firmware blobs + **libhybris** to use the Android GPU/camera drivers from a
+  glibc userspace. Chosen because the answer on drivers was "take the official
+  ones from LineageOS + stock, don't reinvent" - and the open Freedreno/mainline
+  path needs a mainline `msm` DRM that the downstream kernel doesn't have.
+  (Re-confirmable at M5; the x86_64 dev target is unaffected by this.)
+- **Dev target now:** x86_64, in **QEMU** (primary, fast headless iteration) and
+  **VirtualBox** (for eyeballing). **aarch64/sweet target runs in parallel from M3.**
+- **Hardware:** Redmi Note 10 Pro 4G "sweet" (SM6150, Adreno 618), 8 GB RAM
+  variant + 4 GB zram -> ~12 GB budget. Bootloader unlock window ~2026-09-10
+  (see the sweet-BL-unlock memory). Userspace bits are testable *now* on the
+  still-locked phone via an aarch64 chroot under Termux.
+- **UI:** a fork of **cage** (wlroots kiosk compositor, C) - one app fullscreen,
+  exactly NeurOS's model - plus a lockscreen (`ext-session-lock-v1` + a minimal
+  `neuros-lock` client). GLES2 throughout: shader-lerp gradient background +
+  glyph atlas for text. FIGlet-style block font (runtime `.flf` parser) for the
+  big status text; normal monospace for clock/date/battery.
 
-## "The sweet drivers blob" - what actually exists
+## Decisions by area
 
-There is no single blob that makes non-Android Linux work on sweet. From the
-stock Xiaomi fastboot ROM (`sweet_*_images_*.tgz`) we harvest, in order of value:
+### A. Kernel & phone hardware
+1. **Kernel:** downstream Android kernel for sweet (LineageOS
+   `android_kernel_xiaomi_sm6150` / Xiaomi OSS `sweet-*-oss`), Android boot-image
+   format. All driver-dependent bits come from the LineageOS device + vendor
+   trees and stock HyperOS (this device shipped the earliest HyperOS, early 2024
+   - pin that exact fastboot ROM). Mainline kernel: a someday goal, not committed.
+2. **GPU:** libhybris over the Adreno GLES/EGL blob (pairs with the downstream
+   KGSL driver). Freedreno is out - it needs mainline `msm` DRM.
+3. **Camera:** Android camera HAL via hybris (or a minimal HAL container).
+   "Autonomous camera" is core to the concept but lands *after* first boot (M6/M7).
+4. **Partitions:** our **own GPT**. **A/B slots.** Keep the stock firmware /
+   modem / dsp / persist partitions untouched (blobs load from there). New:
+   `boot_a/b`, `vbmeta_a/b`, `neuros_a/b` (erofs root, ~2 GB each), `data`
+   (f2fs, remaining space, shared across slots).
+5. **Verity/AVB:** sign `boot` + `vbmeta` with **our own key**. Bootloader stays
+   unlocked (re-lock with a custom AVB key is a later, risky option).
+6. **Recovery:** a fastboot-flashable known-good image + a boot-as-recovery
+   ramdisk. TWRP optionally kept on the side during bring-up. *(implementer's call)*
 
-1. **Firmware files** (`/lib/firmware`): Adreno GMU/zap (`a615_*.bin` / a6xx),
-   WiFi/BT (`cnss`/`qca`), modem (`mba.mbn`, `modem.mbn`), DSP (`adsp`, `cdsp`),
-   Venus (video). These are plain files, copied as-is. Extract from `vendor.img`
-   / the `firmware` partition, or take from `linux-firmware` where mirrored.
-2. **Kernel**: built from source - Xiaomi's GPL tree
-   `MiCode/Xiaomi_Kernel_OpenSource` branch `sweet-*-oss`. Not a blob. We rebase
-   the touchscreen (Focaltech/Goodix/NVT), panel (DSI), and charger drivers onto
-   a Buildroot-managed kernel; long-term goal is mainline + minimal downstream.
-3. **Device tree**: from that kernel tree / `dtbo.img`.
-4. **GPU userspace**: with **Freedreno + Mesa** (open, mature for a6xx) we do NOT
-   need the proprietary Adreno GLES blobs. libhybris is the fallback only if
-   Freedreno can't drive the panel/GPU.
+### B. Compositor & UI
+7. **Base:** fork **cage**. Add `ext-session-lock-v1` + `neuros-lock` for the
+   **lockscreen**.
+8. **Render:** GLES2 for everything (gradient shader + text atlas), one pipeline. *(call)*
+9. **FIGlet:** runtime `.flf` parser. *(call)*
+10. **Boot -> UI:** **seatd** + compositor as the seat session, no login manager
+    (single-user appliance). systemd is PID 1.
 
-Android HALs from `vendor.img` (hwbinder, bionic-linked) are **not usable** in a
-from-scratch glibc Linux without an Android container - deliberately out of scope.
+### C. OS & updates
+11. **Root fs:** **erofs**, read-only. *(call)*
+12. **Updates:** **A/B seamless** via **swupdate**; failed boot -> automatic
+    rollback to the other slot.
+13. **Node runtime:** one shared Node in the image, from the official aarch64
+    tarball (not the Buildroot `nodejs` package - version lag, CLIs are picky).
+14. **Agent CLIs:** *not* bundled or auto-installed. The user guide documents
+    pulling them from the on-device terminal into `/opt/neuros/agents/<agent>`
+    (survives OTA - it's on the data partition).
+15. **v1 agent:** **Claude Code only**, baked into the image. The 6-agent
+    framework (color presets, mascots, switching) is deferred past v1.
+16. **Destructive-command guard:** none of our own - rely on Claude Code's built-in
+    permission / safety system (e.g. its own checks before `rm`-ing root).
 
-### Parallel task, doable now (bootloader still locked)
-Download the sweet fastboot ROM (RU + global), unpack, inventory
-`proprietary-files.txt` from the LineageOS `android_device_xiaomi_sweet` tree
-against what's in the dump. Produces the firmware manifest for target 2.
+### D. Agent runtime & audio
+17. **`neuros-agentd`:** **Rust** (stream parsing, async, robustness).
+18. **TTS routing:** a markdown-stripping filter sits between agent stdout and
+    Piper - drop `**`/`__`, code fences, headings, turn links into their text,
+    collapse tables, chunk into sentences. Raw text would have Piper saying
+    "asterisk asterisk".
+19. **Piper voices:** **male only** - ru `ruslan`, en `ryan`. Others downloadable. *(call)*
+20. **STT / mic:** a hardware **voice-toggle button** (beside a camera-trigger
+    button) flips an always-listening stream on/off. Stream ON: **vosk-small**
+    does VAD segmentation (no wake word - any speech is transcribed),
+    **whisper.cpp `small` f16** transcribes each segment. Stream OFF: mic fully
+    disabled. Exact key mapping TBD (sweet has only power + volume keys).
+
+### D2. Connectivity (WiFi + cellular data both required)
+The SIM has unlimited data - mobile data is a first-class path, not optional.
+- **WiFi:** `qcacld-3.0` (the big out-of-tree driver in the downstream kernel,
+  WCN3990) + `wcnss`/`cnss` firmware + `wpa_supplicant`.
+- **Bluetooth:** WCN3990 via `hci_qca` / `btqca` (+ `wcnss_filter`).
+- **Cellular data:** modem firmware brought up by `rmtfs` + `qrtr-ns` +
+  `pd-mapper` + `tqftpserv` (remoteproc). Data path via **ofono** with the
+  RIL-over-`libhybris` plugin (consistent with the Halium choice); fallback
+  `ModemManager` + `libqmi` + `rmnet_data0`. APN config shipped + editable.
+- **Network manager:** **NetworkManager** on the phone (WiFi + ModemManager,
+  WiFi-preferred routing, simple UI hooks). `systemd-networkd` stays only on the
+  x86 dev VM.
+- Voice calls / VoLTE: out of scope for now (data + SMS only).
+Buildroot additions: `qcacld` firmware handling, `rmtfs`, `qrtr`, `pd-mapper`,
+`tqftpserv`, `ofono`, `networkmanager`, `modemmanager`, `libqmi`.
+
+### E. Dev workflow
+21. Build **both** QEMU and VirtualBox images from the x86_64 config.
+22. aarch64 target wired up **from M3**; full-system tests in QEMU, userspace
+    smoke tests (agentd, Piper, whisper, vosk) in an aarch64 Termux chroot on
+    the locked phone - even before unlock.
+
+## What we harvest from sweet's stock firmware / LineageOS
+
+Halium-style, so more is reused than a pure-mainline build:
+
+1. **Downstream kernel** - built from GPL source (LineageOS / Xiaomi OSS). Not a blob.
+2. **Firmware files** -> `/lib/firmware` / `/vendor/firmware`: Adreno GMU/zap,
+   WiFi/BT (`wcnss`/`cnss`/`qca` for `qcacld-3.0`), modem (`mba.mbn`,
+   `modem.mbn`, `modemuw`), DSP (`adsp`, `cdsp`), Venus. Plain files, copied
+   as-is. Modem NV / `rmtfs` data comes from the stock `modemst1/2` + `fsg`
+   partitions - leave those in place.
+3. **Vendor blobs** (`/vendor` from LineageOS `proprietary-files.txt`): Adreno
+   GLES/EGL userspace, camera HAL, sensor libs - loaded through **libhybris**.
+4. **Device tree / dtbo** - from the kernel tree.
+
+Buildroot additions this implies: `libhybris`, `android-headers`, and possibly a
+minimal Android property/HAL container (for camera). Packaged in this BR2_EXTERNAL.
 
 ## Milestones
 
 - [ ] **M0 - build chain boots** (x86_64): `make config && make` -> `disk.img` ->
-  VirtualBox -> autologin root shell under systemd, sshd reachable on :2222.
-- [ ] **M1 - graphics stack**: mesa (swrast/virgl in VM), libdrm, wlroots,
-  seatd/libseat, our compositor skeleton drawing a solid agent-color background.
-- [ ] **M2 - FIGlet UI**: `.flf` parser + GLES text rendering; status line
-  (Working/Thinking/Waiting/Idle + tool), clock/date/battery.
-- [ ] **M3 - agent runtime (`neuros-agentd`)**: spawn selected agent CLI, pipe
-  STT text -> stdin, stdout -> Piper TTS. Agent switching. Per-agent isolated
-  memory dirs under `/home/<agent>/memory/{you,topics,area}`.
-- [ ] **M4 - audio**: Piper (TTS, CPU ONNX) packaged; STT engine chosen + packaged.
-- [ ] **M5 - aarch64 target**: `neuros_sweet_defconfig`, cross toolchain, kernel
-  from Xiaomi OSS tree, firmware manifest, `boot.img`/`super` layout.
-- [ ] **M6 - first flash** (after 2026-09-10 unlock): fastboot the aarch64 image,
-  bring up display -> touch -> wifi -> GPU -> camera -> modem, in that order.
-- [ ] **M7 - VPN**: Happ cross-compiled from source for aarch64.
+  QEMU/VirtualBox -> autologin root shell under systemd, sshd on :2222. *(building)*
+- [ ] **M1 - graphics stack**: mesa (llvmpipe/virgl in VM), libdrm, wlroots,
+  seatd; **cage fork** booting to a solid agent-color GLES gradient. Bring the
+  erofs + overlay-/etc layout to x86 here.
+- [ ] **M2 - UI**: `.flf` parser + GLES glyph atlas; status line
+  (Working/Thinking/Waiting/Idle + tool), clock/date/battery; **lockscreen**
+  (`ext-session-lock-v1` + `neuros-lock`).
+- [ ] **M3 - agent runtime** (`neuros-agentd`, Rust): spawn Claude Code, STT ->
+  stdin, stdout -> markdown filter -> Piper; memory at
+  `/home/claude/memory/{you,topics,area}`. **aarch64 build target added here.**
+- [ ] **M4 - audio**: Piper packaged (ru `ruslan`, en `ryan`); whisper.cpp
+  `small` f16 packaged; vosk-small VAD; mic-toggle + camera-trigger input.
+- [ ] **M5 - aarch64 / sweet target**: `neuros_sweet_defconfig`; downstream
+  kernel package; `libhybris` + `android-headers` packages; firmware manifest;
+  own-GPT + A/B layout; our AVB key; swupdate.
+- [ ] **M6 - first flash** (after unlock ~2026-09-10): bring-up order
+  display -> touch -> **wifi (`qcacld-3.0`)** -> GPU (hybris) -> audio -> sensors
+  -> **modem + cellular data (`rmtfs`/`qrtr` + ofono, `rmnet_data0`)** -> BT.
+- [ ] **M7**: camera (hybris HAL) + autonomy; Happ VPN from source (aarch64);
+  the 6-agent framework.
 
-## Locked details
+### Parallel tasks, doable now (bootloader still locked)
+- Download the earliest HyperOS fastboot ROM for sweet + clone LineageOS
+  `android_device_xiaomi_sweet` / `vendor_xiaomi_sweet`; diff `proprietary-files.txt`
+  against the dump -> firmware + blob manifest for M5.
+- Stand up an aarch64 Termux chroot on the phone for userspace smoke tests.
 
-- **Compositor language: C** (wlroots native). Smallest dependency surface on ARM.
-- **Per-agent memory**: `/home/<agent>/memory/{you,topics,area}/*.md`. The
-  `/home/<agent>` dir is created lazily the first time that agent's CLI is used
-  (open the Claude CLI -> `/home/claude/` appears). Isolated per agent; cross-read
-  is an on-demand tool, not default.
-- **Bundled on-device MCP tools** (Python, `fastmcp`-based, live in `/home/chatgpt`
-  now, MIT, vibeDN repos): `mcp-paint` (TTY Ibis Paint - layered raster canvas,
-  deps: skia-python [aarch64 wheels exist] + numpy) and `NeuroCut` (TTY CapCut -
-  multi-track editor, deps: system MLT `mlt7` + ffmpeg + fontconfig + pillow).
-  Agents connect to them as MCP servers. NeuroCut is the heavier ARM build
-  (ffmpeg + MLT); Buildroot has `mlt`, `ffmpeg`, `fontconfig`, `python-pillow`.
-  `NeuroGen` (media generation) is cloud-API only - not bundled on device.
+## Still open
+- **Confirm Halium-style** (downstream kernel + libhybris) over mainline+Freedreno.
+  Strong read from the driver answers; final call at M5.
+- Pin the exact early-2024 HyperOS build for sweet.
+- Hardware-key mapping for camera-trigger / voice-toggle (only power+volume exist).
 
-## STT sizing (SD732G, CPU only, phone also running compositor + agent CLI + Piper)
+## Storage layout
 
-whisper.cpp (multilingual GGML) - disk / peak RAM / rough real-time factor:
+**Phone:** read-only image root + one persistent data partition.
+
+| mount        | fs / mechanism                          | notes                          |
+|--------------|-----------------------------------------|--------------------------------|
+| `/`          | **erofs**, read-only (lz4hc)            | shipped in the A/B slot image  |
+| `/etc`       | **overlayfs** (lower=image, upper=data) | machine-id, ssh keys, wifi persist |
+| `/var`       | dir on data partition (bring-up)        | real logs; -> tmpfs later      |
+| `/home`, `/opt` | dirs on data partition, rw           | agent installs + memory        |
+| swap         | 4 GB zram                               |                                |
+
+- data partition fs: **f2fs** (flash-optimized, power-loss safe).
+- mounts pivoted by a tiny initramfs.
+- Buildroot pieces present: `BR2_TARGET_ROOTFS_EROFS`, `BR2_PACKAGE_F2FS_TOOLS`,
+  `CONFIG_OVERLAY_FS` (already in the kernel config).
+
+**x86_64 dev:** plain rw ext4 for M0; erofs + overlay layout added at M1.
+
+## MLT / NeuroCut packaging (resolved)
+
+- Buildroot has **no `mlt` package** -> add `package/mlt/` to this BR2_EXTERNAL.
+- **No SWIG / python bindings needed**: NeuroCut shells out to the `melt` CLI +
+  `ffmpeg` + `fc-cache` (verified in `neurocut/render.py`, `probe.py`). CLI-only.
+- Modules: core + `avformat` (ffmpeg) + `pango` (pango/cairo/fontconfig) for
+  titles. Disable qt6/frei0r/gtk/opengl/rtaudio/sdl.
+- mcp-paint: `skia-python` has aarch64 wheels -> thin wheel-fetch package or a
+  runtime venv. numpy is a BR package.
+
+## STT sizing reference (SD732G, CPU only)
+
+whisper.cpp multilingual GGML - disk / peak RAM / real-time factor:
 
 | model  | f16 disk | f16 RAM | q5_1 disk | q5_1 RAM | RTF (q5_1) |
 |--------|---------:|--------:|----------:|---------:|-----------:|
@@ -83,58 +194,6 @@ whisper.cpp (multilingual GGML) - disk / peak RAM / rough real-time factor:
 | small  |  466 MB  | ~950 MB |  ~181 MB  | ~600 MB  | ~2x        |
 | medium |  1.5 GB  | ~2.6 GB |  ~514 MB  | ~1.5 GB  | ~6x        |
 
-Vosk (Kaldi, streaming, per language):
-
-| model        | disk        | RAM        | CPU        | notes                       |
-|--------------|------------:|-----------:|-----------:|-----------------------------|
-| small (ru/en)|  40-50 MB   | 250-500 MB | very light | partials; no punct/casing   |
-| large (ru/en)|  1.5-2.4 GB | 4-6 GB     | moderate   | streaming, better accuracy  |
-| +punct model |  15-30 MB   | ~200 MB    | light      | optional recase/punct step  |
-
-**Decision** (device is the 8 GB RAM sweet variant + 4 GB zram swap -> ~12 GB budget):
-- Primary STT = **whisper.cpp `small`, f16 (no quantization)** - ~466 MB disk,
-  ~950 MB RAM, ~2x RTF. Fits the budget comfortably; best accuracy we can run.
-- **Vosk small (ru+en)** stays as the cheap always-on front-end: VAD + wake
-  phrase gate. It never transcribes for real - it just decides when to hand a
-  segment to whisper. Solves whisper's non-streaming latency for wake/commands.
-- medium/large whisper, and vosk-large: not on device.
-- Piper TTS for reference: ~20-65 MB/voice, ~50-150 MB RAM, faster than realtime.
-
-## Storage layout (decided)
-
-**Phone (target 2):** image-based read-only root + one persistent data partition.
-
-| mount        | fs / mechanism                          | notes                          |
-|--------------|-----------------------------------------|--------------------------------|
-| `/`          | **erofs**, read-only (lz4hc)            | shipped in OTA image, reflashed wholesale |
-| `/etc`       | **overlayfs** (lower=image, upper=data) | machine-id, ssh keys, wifi creds persist |
-| `/var`       | dir on data partition (bring-up)        | real logs to chase bugs; -> tmpfs later |
-| `/home`, `/opt` | dirs on data partition, rw           | agent self-updates -> `/opt/neuros/agents/<a>`; memory -> `/home/<a>/memory` |
-| swap         | 4 GB zram                               |                                |
-
-- data partition fs: **f2fs** (flash-optimized, power-loss safe - same as Android `/data`).
-- mounts pivoted by a tiny initramfs.
-- payoff: OTA = reflash erofs (data survives); battery death mid-write can't
-  corrupt root; no root fsck; factory reset = wipe data partition.
-- Buildroot pieces all present: `BR2_TARGET_ROOTFS_EROFS`, `BR2_PACKAGE_F2FS_TOOLS`,
-  `CONFIG_OVERLAY_FS` (already in our kernel config).
-
-**x86_64 dev:** plain rw ext4 for M0. Bring the erofs+overlay layout to x86 at
-**M1** to shake out the initramfs/overlay pivot before the phone. Default in
-`neuros_sweet_defconfig` from M5.
-
-## MLT / NeuroCut packaging (resolved)
-
-- Buildroot has **no `mlt` package** -> we add `package/mlt/` to this BR2_EXTERNAL.
-- **No SWIG / python bindings needed**: NeuroCut shells out to the `melt` CLI +
-  `ffmpeg` + `fc-cache` (verified in `neurocut/render.py`, `probe.py`). It never
-  imports `mlt7`. So the package is **CLI-only**.
-- Modules to enable: core + `avformat` (ffmpeg [BR pkg]) + `pango` (pango/cairo/
-  fontconfig [all BR pkgs]) for titles. Disable qt6/frei0r/gtk/opengl/rtaudio/sdl.
-- mcp-paint: `skia-python` has aarch64 wheels -> thin wheel-fetch package or a
-  runtime venv. numpy is a BR package. Not a blocker.
-
-## Open questions
-
-- erofs vs squashfs for the ro root - leaning erofs (Android-native, better
-  random read on flash, mainline). Confirm.
+Vosk (Kaldi, streaming, per language): small ru/en ~40-50 MB disk, 250-500 MB
+RAM, very light CPU (used here only as VAD). Large models not on device.
+Piper TTS: ~20-65 MB/voice, ~50-150 MB RAM, faster than realtime.
