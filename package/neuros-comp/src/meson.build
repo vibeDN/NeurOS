@@ -115,6 +115,7 @@ endif
 
 cage_sources = [
   'cage.c',
+  'figlet.c',
   'idle_inhibit_v1.c',
   'output.c',
   'seat.c',
@@ -127,6 +128,7 @@ cage_headers = [
   configure_file(input: 'config.h.in',
                  output: 'config.h',
                  configuration: conf_data),
+  'figlet.h',
   'idle_inhibit_v1.h',
   'output.h',
   'seat.h',
