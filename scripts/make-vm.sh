@@ -30,7 +30,7 @@ echo ">> creating VM $VM"
 VBoxManage createvm --name "$VM" --ostype Linux_64 --register
 VBoxManage modifyvm "$VM" \
 	--memory 4096 --cpus 4 --firmware bios \
-	--graphicscontroller vmsvga --vram 64 \
+	--graphicscontroller vmsvga --vram 128 --accelerate3d on \
 	--nic1 nat --nictype1 virtio \
 	--audio-driver none \
 	--uart1 0x3f8 4 --uartmode1 file "$ROOT/output/serial.log"

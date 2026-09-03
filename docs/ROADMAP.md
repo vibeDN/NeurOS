@@ -178,11 +178,14 @@ minimal Android property/HAL container (for camera). Packaged in this BR2_EXTERN
 - [x] **M0 - build chain boots** (x86_64): boots in VirtualBox, systemd reports
   `running` with 0 failed units, autologin root, sshd on :2222. Bootlin external
   toolchain (gcc 14 / glibc). `make config && make && make vm && make run-headless`.
-- [~] **M1 - graphics stack**: mesa3d 26 (softpipe/svga/virgl, no LLVM), libdrm,
-  wlroots 0.19.2, seatd, libinput, libxkbcommon in the image. `package/neuros-comp`
-  scaffolded as a fork of cage 0.2.1. *(mesa building)*
-  Still to do: verify cage/neuros-comp starts a GLES2 renderer in the VM; bring
-  the erofs + overlay-/etc layout to x86.
+- [~] **M1 - graphics stack**: mesa3d 26, libdrm, wlroots 0.19.2, libseat,
+  libinput, libxkbcommon in the image. `package/neuros-comp` = fork of cage 0.2.1,
+  **builds and runs** in the VM (headless backend, Wayland display up, child
+  spawn/reap OK). VirtualBox has no 3D -> wlroots falls back to the **pixman
+  software renderer**; adding **llvmpipe** for GLES2-in-software (LLVM build,
+  ~30min, cached). `/dev/dri/card0` present (vmwgfx).
+  Still to do: llvmpipe build; DRM backend test (needs a GUI VM or 3D accel);
+  erofs + overlay-/etc layout on x86; busybox `timeout` (not built).
 - [ ] **M2 - UI shell**: the static 4-zone shell (see "UI shell (v0)") - thin
   time/date/battery strip, top agent/model pane, center pane, bottom state pane;
   `.flf` parser + GLES glyph atlas for the FIGlet panes; embedded VT in the
