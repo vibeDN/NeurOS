@@ -21,7 +21,8 @@
   exactly NeurOS's model - plus a lockscreen (`ext-session-lock-v1` + a minimal
   `neuros-lock` client). GLES2 throughout: shader-lerp gradient background +
   glyph atlas for text. FIGlet-style block font (runtime `.flf` parser) for the
-  big status text; normal monospace for clock/date/battery.
+  big status text; normal monospace for clock/date/battery. Layout: see
+  "UI shell (v0)" and `docs/ui-mockup-v0.jpg`.
 
 ## Decisions by area
 
@@ -29,8 +30,9 @@
 1. **Kernel:** downstream Android kernel for sweet (LineageOS
    `android_kernel_xiaomi_sm6150` / Xiaomi OSS `sweet-*-oss`), Android boot-image
    format. All driver-dependent bits come from the LineageOS device + vendor
-   trees and stock HyperOS (this device shipped the earliest HyperOS, early 2024
-   - pin that exact fastboot ROM). Mainline kernel: a someday goal, not committed.
+   trees and stock HyperOS. **Pin the newest stable HyperOS fastboot ROM for
+   sweet** (newer = more security/bug fixes; the device is on an early-2024
+   build now but we harvest from current). Mainline kernel: a someday goal.
 2. **GPU:** libhybris over the Adreno GLES/EGL blob (pairs with the downstream
    KGSL driver). Freedreno is out - it needs mainline `msm` DRM.
 3. **Camera:** Android camera HAL via hybris (or a minimal HAL container).
@@ -73,11 +75,12 @@
     collapse tables, chunk into sentences. Raw text would have Piper saying
     "asterisk asterisk".
 19. **Piper voices:** **male only** - ru `ruslan`, en `ryan`. Others downloadable. *(call)*
-20. **STT / mic:** a hardware **voice-toggle button** (beside a camera-trigger
-    button) flips an always-listening stream on/off. Stream ON: **vosk-small**
-    does VAD segmentation (no wake word - any speech is transcribed),
-    **whisper.cpp `small` f16** transcribes each segment. Stream OFF: mic fully
-    disabled. Exact key mapping TBD (sweet has only power + volume keys).
+20. **STT / mic:** **on-screen** mic + camera buttons in the chat pane (a
+    hardware volume long-press may be bound to mic later, not required). Mic
+    toggles an always-listening stream: ON -> **vosk-small** does VAD
+    segmentation (no wake word, any speech transcribed), **whisper.cpp `small`
+    f16** transcribes each segment; OFF -> mic disabled. The agent also gets a
+    tool to open the mic/camera itself.
 
 ### D2. Connectivity (WiFi + cellular data both required)
 The SIM has unlimited data - mobile data is a first-class path, not optional.
@@ -100,6 +103,50 @@ Buildroot additions: `qcacld` firmware handling, `rmtfs`, `qrtr`, `pd-mapper`,
 22. aarch64 target wired up **from M3**; full-system tests in QEMU, userspace
     smoke tests (agentd, Piper, whisper, vosk) in an aarch64 Termux chroot on
     the locked phone - even before unlock.
+
+## UI shell (v0)
+
+Mockup: `docs/ui-mockup-v0.jpg`. Portrait, thick rounded-rect frames, the
+agent-color gradient wallpaper showing behind everything.
+
+```
+ time, date                                    battery      <- thin strip, plain mono
++-------------------------------------------------------+
+|                    Ai-name  (FIGlet)                  |   top pane: agent + model
+|                       model                          |
++-------------------------------------------------------+
+|                                                      |
+|            center pane - mode-switched:              |
+|                                                      |
+|   - mascot : full-pane AI animation (Claude ->       |
+|             Claw'd, pending rights; generic until)   |
+|   - chat   : embedded VT running the agent CLI.      |
+|             Claude Code's own rendering - tool       |
+|             calls, file-edit diffs (Update(path)     |
+|             +4 -2 + hunk), thinking. Fits the TTY    |
+|             look. Overlaid: [photo] [mic] buttons.   |
+|   - camera : live viewfinder; replaces the pane      |
+|             until photo taken / cancelled; image     |
+|             goes to the agent.                       |
+|                                                      |
++-------------------------------------------------------+
+|            Working / Thinking / Waiting / Idle        |   bottom pane: state (FIGlet)
+|                  using *tool-name*                    |   + activity ("reading important.md")
++-------------------------------------------------------+
+```
+
+**Plumbing** - `neuros-agentd` (Rust) spawns the agent CLI on a **pty** and:
+- renders the pty into the center-pane VT (chat mode),
+- injects STT transcripts as stdin,
+- tees pty stdout -> markdown filter -> Piper,
+- parses status / tool events to drive the bottom pane,
+- exposes a **`camera.capture` / `camera.view`** tool (and mic open) so the
+  agent can look / listen on its own.
+
+Compositor (cage fork) owns the 4 zones, the gradient wallpaper (GLES shader),
+frame chrome, the on-screen buttons, and the lockscreen. Milestones: M2 = the
+static 4-zone shell + VT + FIGlet panes; M3 = agentd pty wiring; M4 = mic
+button <-> stream; M7 = camera pane + mascot animation + `camera.*` tool.
 
 ## What we harvest from sweet's stock firmware / LineageOS
 
@@ -125,34 +172,36 @@ minimal Android property/HAL container (for camera). Packaged in this BR2_EXTERN
 - [ ] **M1 - graphics stack**: mesa (llvmpipe/virgl in VM), libdrm, wlroots,
   seatd; **cage fork** booting to a solid agent-color GLES gradient. Bring the
   erofs + overlay-/etc layout to x86 here.
-- [ ] **M2 - UI**: `.flf` parser + GLES glyph atlas; status line
-  (Working/Thinking/Waiting/Idle + tool), clock/date/battery; **lockscreen**
-  (`ext-session-lock-v1` + `neuros-lock`).
-- [ ] **M3 - agent runtime** (`neuros-agentd`, Rust): spawn Claude Code, STT ->
-  stdin, stdout -> markdown filter -> Piper; memory at
+- [ ] **M2 - UI shell**: the static 4-zone shell (see "UI shell (v0)") - thin
+  time/date/battery strip, top agent/model pane, center pane, bottom state pane;
+  `.flf` parser + GLES glyph atlas for the FIGlet panes; embedded VT in the
+  center; on-screen photo/mic buttons; **lockscreen** (`ext-session-lock-v1` +
+  `neuros-lock`).
+- [ ] **M3 - agent runtime** (`neuros-agentd`, Rust): spawn Claude Code on a
+  pty, render to the center VT, STT -> stdin, stdout -> markdown filter -> Piper,
+  status/tool events -> bottom pane; memory at
   `/home/claude/memory/{you,topics,area}`. **aarch64 build target added here.**
 - [ ] **M4 - audio**: Piper packaged (ru `ruslan`, en `ryan`); whisper.cpp
-  `small` f16 packaged; vosk-small VAD; mic-toggle + camera-trigger input.
+  `small` f16 packaged; vosk-small VAD; mic button <-> always-listen stream.
 - [ ] **M5 - aarch64 / sweet target**: `neuros_sweet_defconfig`; downstream
   kernel package; `libhybris` + `android-headers` packages; firmware manifest;
   own-GPT + A/B layout; our AVB key; swupdate.
 - [ ] **M6 - first flash** (after unlock ~2026-09-10): bring-up order
   display -> touch -> **wifi (`qcacld-3.0`)** -> GPU (hybris) -> audio -> sensors
   -> **modem + cellular data (`rmtfs`/`qrtr` + ofono, `rmnet_data0`)** -> BT.
-- [ ] **M7**: camera (hybris HAL) + autonomy; Happ VPN from source (aarch64);
-  the 6-agent framework.
+- [ ] **M7**: camera pane + `camera.*` agent tool (hybris HAL) + autonomy;
+  mascot animation; Happ VPN from source (aarch64); the 6-agent framework.
 
 ### Parallel tasks, doable now (bootloader still locked)
-- Download the earliest HyperOS fastboot ROM for sweet + clone LineageOS
+- Download the newest-stable HyperOS fastboot ROM for sweet + clone LineageOS
   `android_device_xiaomi_sweet` / `vendor_xiaomi_sweet`; diff `proprietary-files.txt`
   against the dump -> firmware + blob manifest for M5.
 - Stand up an aarch64 Termux chroot on the phone for userspace smoke tests.
 
 ## Still open
-- **Confirm Halium-style** (downstream kernel + libhybris) over mainline+Freedreno.
-  Strong read from the driver answers; final call at M5.
-- Pin the exact early-2024 HyperOS build for sweet.
-- Hardware-key mapping for camera-trigger / voice-toggle (only power+volume exist).
+- Pick the exact newest-stable HyperOS fastboot ROM build for sweet to harvest from.
+- Claw'd mascot: rights request sent to Anthropic (pending). Generic mascot until
+  a reply.
 
 ## Storage layout
 
