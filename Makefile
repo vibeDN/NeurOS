@@ -47,7 +47,13 @@ vm:
 	$(CURDIR)/scripts/make-vm.sh
 
 run:
-	VBoxManage startvm NeurOS-dev --type gui
+	sg vboxusers -c 'VBoxManage startvm NeurOS-dev --type gui'
+
+run-headless:
+	sg vboxusers -c 'VBoxManage startvm NeurOS-dev --type headless'
+
+kill-vm:
+	sg vboxusers -c 'VBoxManage controlvm NeurOS-dev poweroff' || true
 
 progress:
 	$(CURDIR)/scripts/build-progress.sh
