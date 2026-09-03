@@ -1,0 +1,9 @@
+# Buildroot is cloned in-tree but not vendored
+/buildroot/
+
+# Build output
+/output/
+
+# Local scratch
+*.vdi
+*.log

@@ -1,0 +1,7 @@
+NAME="NeurOS"
+PRETTY_NAME="NeurOS (dev)"
+ID=neuros
+ID_LIKE=buildroot
+BUILD_ID=milestone-0
+ANSI_COLOR="1;38;2;217;119;87"
+HOME_URL="https://github.com/vibeDN/NeurOS"
