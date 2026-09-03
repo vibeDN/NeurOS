@@ -25,11 +25,12 @@ else
 WHISPER_CPP_CONF_OPTS += -DGGML_BLAS=OFF
 endif
 
-# only the CLI + libs; drop the other examples
+# CMake builds in-source; binaries + libs land in $(@D)/bin
 define WHISPER_CPP_INSTALL_TARGET_CMDS
-	$(INSTALL) -D -m 0755 $(@D)/build/bin/whisper-cli $(TARGET_DIR)/usr/bin/whisper-cli
-	cp -a $(@D)/build/src/libwhisper.so* $(TARGET_DIR)/usr/lib/
-	cp -a $(@D)/build/ggml/src/libggml*.so* $(TARGET_DIR)/usr/lib/
+	$(INSTALL) -D -m 0755 $(@D)/bin/whisper-cli $(TARGET_DIR)/usr/bin/whisper-cli
+	$(INSTALL) -D -m 0755 $(@D)/bin/whisper-vad-speech-segments \
+		$(TARGET_DIR)/usr/bin/whisper-vad-speech-segments
+	cp -a $(@D)/bin/libwhisper.so* $(@D)/bin/libggml*.so* $(TARGET_DIR)/usr/lib/
 endef
 
 $(eval $(cmake-package))
