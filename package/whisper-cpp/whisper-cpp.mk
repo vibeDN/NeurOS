@@ -25,6 +25,13 @@ else
 WHISPER_CPP_CONF_OPTS += -DGGML_BLAS=OFF
 endif
 
+# x86_64 dev target: assume x86-64-v3 (AVX2/FMA/F16C/BMI2, any Haswell+/Zen+).
+# The phone target sets ARM flags at M5.
+ifeq ($(BR2_x86_64),y)
+WHISPER_CPP_CONF_OPTS += -DGGML_AVX=ON -DGGML_AVX2=ON -DGGML_FMA=ON \
+	-DGGML_F16C=ON -DGGML_BMI2=ON
+endif
+
 # CMake builds in-source; binaries + libs land in $(@D)/bin
 define WHISPER_CPP_INSTALL_TARGET_CMDS
 	$(INSTALL) -D -m 0755 $(@D)/bin/whisper-cli $(TARGET_DIR)/usr/bin/whisper-cli
