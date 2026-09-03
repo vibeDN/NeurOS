@@ -188,17 +188,16 @@ minimal Android property/HAL container (for camera). Packaged in this BR2_EXTERN
   = fork of cage 0.2.1, builds and runs in the VM (headless backend, Wayland
   display up, child spawn/reap OK). VBox exposes no 3D -> **llvmpipe** added for
   GLES2-in-software (LLVM building now). `/dev/dri/card0` (vmwgfx) present.
-- [~] **M2 - UI shell**: **rendering + autostarting in the VM** (screenshots in
-  `output/`). `shell.c` - 48-band gradient wallpaper, 4-zone geometry, tint+border
-  framed panes (thickness scales to output), client confined to the centre pane,
-  agent name / state word as FIGlet block text (one scene rect per ink cell,
-  `figlet.c` parser + bundled `banner.flf`). `neuros-comp -k` keeps the shell up
-  without a client. Autostart: getty@tty1 -> `/etc/profile.d/neuros-session.sh`
-  -> `neuros-session` -> `neuros-comp -k -s -d -- foot`.
-  Blockers/next: **C.UTF-8 locale** foot needs (`BR2_GENERATE_LOCALE`, building -
-  one-time glibc source fetch for host-localedef); small mono text (strip clock,
-  "using <tool>") via fcft; lockscreen (`ext-session-lock-v1`); erofs + overlay-
-  /etc layout on x86.
+- [x] **M2 - UI shell**: renders + autostarts in the VM, end to end. `shell.c` -
+  48-band gradient wallpaper, 4-zone geometry, tint+border framed panes (scaled
+  thickness), client confined to the centre pane, agent name / state word as
+  FIGlet block text (`figlet.c` + bundled `banner.flf`, one scene rect per ink
+  cell). Borderless `foot` in the centre pane (C.UTF-8 generated). `neuros-comp
+  -k` keeps the shell up with no client. Autostart: getty@tty1 -> profile.d ->
+  `neuros-session` -> `neuros-comp -k -s -d -- foot`. **`ipc.c`** control socket
+  + `neuros-ctl` - `agent`/`status`/`colors` verified driving the panes live.
+  Deferred to polish: small mono text (strip clock, "using <tool>") via fcft;
+  lockscreen (`ext-session-lock-v1`); erofs + overlay-/etc layout on x86.
 - [ ] **M2 - UI shell**: the static 4-zone shell (see "UI shell (v0)") - thin
   time/date/battery strip, top agent/model pane, center pane, bottom state pane;
   `.flf` parser + GLES glyph atlas for the FIGlet panes; embedded VT in the
