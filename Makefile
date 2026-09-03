@@ -48,3 +48,6 @@ vm:
 
 run:
 	VBoxManage startvm NeurOS-dev --type gui
+
+progress:
+	$(CURDIR)/scripts/build-progress.sh
