@@ -40,10 +40,13 @@ savedefconfig:
 clean:
 	$(BRMAKE) clean
 
-# force-rebuild just the compositor + reassemble the image (local pkg sync
-# detection is unreliable while iterating on package/neuros-comp/src)
+# force-rebuild NeurOS's own (local) packages + reassemble the image. Buildroot's
+# local-package change detection is unreliable while iterating.
 comp:
-	nice -n 15 ionice -c3 $(BRMAKE) neuros-comp-dirclean all
+	nice -n 15 ionice -c3 $(BRMAKE) neuros-comp-rebuild all
+
+ours:
+	nice -n 15 ionice -c3 $(BRMAKE) neuros-comp-rebuild neuros-agentd-rebuild all
 
 distclean:
 	rm -rf $(O)
