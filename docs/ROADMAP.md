@@ -214,13 +214,18 @@ minimal Android property/HAL container (for camera). Packaged in this BR2_EXTERN
   mandatory memory prompt (`docs/agent-memory-prompt.md`) + `/home/claude/memory/
   {you,topics,area}`; STT inject via `tmux send-keys`; Rustify once stable.
   **aarch64 build target.**
-- [~] **M4 - audio**: **Piper works in the VM** - `piper` (prebuilt, bundles
-  onnxruntime/espeak-ng) + `piper-voices` (en_US-ryan-medium, ru_RU-ruslan-medium).
-  Both voices synth valid WAV, RTF ~0.04 on x86. HDA sound card up. `agentd`
-  pipes filtered prose -> `piper --output-raw` -> `aplay` (PCM device opens;
-  actual playback unverifiable headless).
-  Next: buffer whole responses instead of line-by-line; whisper.cpp `small` f16
-  packaging (STT); vosk-small VAD; mic button; wire STT -> `tmux send-keys`.
+- [x] **M4 - audio**: full voice loop works in the VM.
+  - **TTS**: `piper` (prebuilt) + `piper-voices` (en ryan, ru ruslan). Synth
+    valid WAV; `agentd` speaks filtered prose via `piper --output-raw | aplay`.
+  - **STT**: `whisper-cpp` built from source (+OpenBLAS) + `whisper-model`
+    (ggml-small.bin, f16, 466 MB) + `neuros-stt` (WAV -> text -> `tmux send-keys`).
+  - **Verified end to end**: piper synth "what is the capital of France" -> WAV
+    -> `neuros-stt` -> whisper transcribes "What is the capital of France?" ->
+    injected into the agent session -> agent responds.
+  - Perf caveat: `GGML_NATIVE=OFF` -> generic x86-64, no AVX -> whisper RTF ~15x
+    in the VM. Fine for dev; tune `-march` / dotprod for the SM6150 at M5.
+  Next: real mic capture (`arecord`) + VAD (`whisper-vad-speech-segments`, or
+  vosk-small); buffer whole responses for TTS; mic button in the shell.
 - [ ] **M5 - aarch64 / sweet target**: `neuros_sweet_defconfig`; downstream
   kernel package; `libhybris` + `android-headers` packages; firmware manifest;
   own-GPT + A/B layout; our AVB key; swupdate.
