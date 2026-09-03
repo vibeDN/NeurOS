@@ -69,7 +69,9 @@
     permission / safety system (e.g. its own checks before `rm`-ing root).
 
 ### D. Agent runtime & audio
-17. **`neuros-agentd`:** **Rust** (stream parsing, async, robustness).
+17. **`neuros-agentd`:** **Rust** (stream parsing, async, robustness). Injects
+    the mandatory memory system prompt (`docs/agent-memory-prompt.md`) into every
+    agent, same text for all backends.
 18. **TTS routing:** a markdown-stripping filter sits between agent stdout and
     Piper - drop `**`/`__`, code fences, headings, turn links into their text,
     collapse tables, chunk into sentences. Raw text would have Piper saying
@@ -185,8 +187,10 @@ minimal Android property/HAL container (for camera). Packaged in this BR2_EXTERN
   `neuros-lock`).
 - [ ] **M3 - agent runtime** (`neuros-agentd`, Rust): spawn Claude Code on a
   pty, render to the center VT, STT -> stdin, stdout -> markdown filter -> Piper,
-  status/tool events -> bottom pane; memory at
-  `/home/claude/memory/{you,topics,area}`. **aarch64 build target added here.**
+  status/tool events -> bottom pane. Prepend the **mandatory memory system
+  prompt** (`docs/agent-memory-prompt.md`) verbatim; memory at
+  `/home/claude/memory/{you,topics,area}`; signal end-of-session so the agent
+  runs its review-and-file pass. **aarch64 build target added here.**
 - [ ] **M4 - audio**: Piper packaged (ru `ruslan`, en `ryan`); whisper.cpp
   `small` f16 packaged; vosk-small VAD; mic button <-> always-listen stream.
 - [ ] **M5 - aarch64 / sweet target**: `neuros_sweet_defconfig`; downstream
