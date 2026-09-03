@@ -1,7 +1,5 @@
 menu "NeurOS packages"
 
-# Individual package Config.in files are sourced here as they are added,
-# e.g.:
-#   source "$BR2_EXTERNAL_NEUROS_PATH/package/neuros-agentd/Config.in"
+source "$BR2_EXTERNAL_NEUROS_PATH/package/neuros-comp/Config.in"
 
 endmenu

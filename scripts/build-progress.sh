@@ -23,9 +23,10 @@ running=false
 pgrep -f 'nice.*make build' >/dev/null 2>&1 && running=true
 pgrep -f 'buildroot.*BR2_EXTERNAL' >/dev/null 2>&1 && running=true
 
-if [ -f "$O/images/disk.img" ]; then
+last_done=$(grep -c 'NeurOS: image ready' "$LOG" 2>/dev/null || echo 0)
+if ! $running && [ "$last_done" -ge 1 ] && [ -f "$O/images/disk.img" ]; then
 	[ -n "$steps" ] && echo "$steps" > "$BASELINE"
-	echo "[####################] DONE - output/images/disk.img"
+	echo "[####################] DONE ($(tail -1 "$LOG" | grep -c Leaving >/dev/null && echo 'clean' || echo '?')) - disk.img $(date -r "$O/images/disk.img" '+%H:%M')"
 	exit 0
 fi
 

@@ -175,11 +175,14 @@ minimal Android property/HAL container (for camera). Packaged in this BR2_EXTERN
 
 ## Milestones
 
-- [ ] **M0 - build chain boots** (x86_64): `make config && make` -> `disk.img` ->
-  QEMU/VirtualBox -> autologin root shell under systemd, sshd on :2222. *(building)*
-- [ ] **M1 - graphics stack**: mesa (llvmpipe/virgl in VM), libdrm, wlroots,
-  seatd; **cage fork** booting to a solid agent-color GLES gradient. Bring the
-  erofs + overlay-/etc layout to x86 here.
+- [x] **M0 - build chain boots** (x86_64): boots in VirtualBox, systemd reports
+  `running` with 0 failed units, autologin root, sshd on :2222. Bootlin external
+  toolchain (gcc 14 / glibc). `make config && make && make vm && make run-headless`.
+- [~] **M1 - graphics stack**: mesa3d 26 (softpipe/svga/virgl, no LLVM), libdrm,
+  wlroots 0.19.2, seatd, libinput, libxkbcommon in the image. `package/neuros-comp`
+  scaffolded as a fork of cage 0.2.1. *(mesa building)*
+  Still to do: verify cage/neuros-comp starts a GLES2 renderer in the VM; bring
+  the erofs + overlay-/etc layout to x86.
 - [ ] **M2 - UI shell**: the static 4-zone shell (see "UI shell (v0)") - thin
   time/date/battery strip, top agent/model pane, center pane, bottom state pane;
   `.flf` parser + GLES glyph atlas for the FIGlet panes; embedded VT in the

@@ -1,0 +1,23 @@
+config BR2_PACKAGE_NEUROS_COMP
+	bool "neuros-comp (NeurOS compositor)"
+	depends on !BR2_STATIC_LIBS # wlroots
+	depends on BR2_TOOLCHAIN_HAS_THREADS # wlroots
+	depends on BR2_PACKAGE_HAS_LIBEGL # wlroots
+	depends on BR2_PACKAGE_HAS_LIBGLES # wlroots
+	depends on BR2_PACKAGE_HAS_LIBGBM # wlroots
+	select BR2_PACKAGE_WLROOTS
+	select BR2_PACKAGE_WAYLAND
+	select BR2_PACKAGE_WAYLAND_PROTOCOLS
+	select BR2_PACKAGE_LIBXKBCOMMON
+	help
+	  The NeurOS Wayland compositor: a fork of cage (the kiosk
+	  compositor), base v0.2.1. Draws the 4-zone NeurOS shell -
+	  agent/model bar, center pane, state bar - over a per-agent
+	  GLES gradient, and runs one embedded terminal / client.
+
+	  https://github.com/cage-kiosk/cage
+
+comment "neuros-comp needs a glibc/musl toolchain w/ threads, dynamic library, EGL/GLES/GBM"
+	depends on BR2_STATIC_LIBS || !BR2_TOOLCHAIN_HAS_THREADS || \
+		!BR2_PACKAGE_HAS_LIBEGL || !BR2_PACKAGE_HAS_LIBGLES || \
+		!BR2_PACKAGE_HAS_LIBGBM
