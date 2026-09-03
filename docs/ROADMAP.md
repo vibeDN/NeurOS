@@ -137,13 +137,18 @@ agent-color gradient wallpaper showing behind everything.
 +-------------------------------------------------------+
 ```
 
-**Plumbing** - `neuros-agentd` (Rust) spawns the agent CLI on a **pty** and:
-- renders the pty into the center-pane VT (chat mode),
-- injects STT transcripts as stdin,
-- tees pty stdout -> markdown filter -> Piper,
-- parses status / tool events to drive the bottom pane,
+**Plumbing** - candidate design (M3): the agent CLI runs inside a **tmux**
+session; `foot` in the centre pane runs `tmux attach` (read-only for the user).
+`neuros-agentd` then only orchestrates, not a VT emulator:
+- `tmux new-session -d claude` to start / restart the agent,
+- `tmux pipe-pane` tees the pane output -> markdown filter -> Piper,
+- `tmux send-keys` injects STT transcripts,
+- parses the piped stream for status / tool events -> bottom pane (via a small
+  IPC to neuros-comp, e.g. a Unix socket + a `set_status` request),
 - exposes a **`camera.capture` / `camera.view`** tool (and mic open) so the
   agent can look / listen on its own.
+Prototype agentd as a shell script; move to **Rust** once the design holds.
+tmux handles the pty, scrollback, and the tee/inject for free.
 
 Compositor (cage fork) owns the 4 zones, the gradient wallpaper (GLES shader),
 frame chrome, the on-screen buttons, and the lockscreen. Milestones: M2 = the
@@ -183,16 +188,17 @@ minimal Android property/HAL container (for camera). Packaged in this BR2_EXTERN
   = fork of cage 0.2.1, builds and runs in the VM (headless backend, Wayland
   display up, child spawn/reap OK). VBox exposes no 3D -> **llvmpipe** added for
   GLES2-in-software (LLVM building now). `/dev/dri/card0` (vmwgfx) present.
-- [~] **M2 - UI shell**: `shell.c` done - 48-band gradient wallpaper, 4-zone
-  geometry (strip/top/centre/bottom), tint+border framed panes (thickness scales
-  to output), client confined to the centre pane. `figlet.c` - `.flf` parser
-  (tested on the host); agent name + state word drawn as one scene rect per ink
-  cell; `banner.flf` bundled. `neuros-session` autostarts `neuros-comp -- foot`
-  on tty1. *(pending the llvmpipe build to do the first visual check via
-  `VBoxManage screenshotpng`)*
-  Still to do: visual verify + tune; small mono text (strip, "using <tool>") via
-  fcft; lockscreen (`ext-session-lock-v1`); compositor-persists-without-child;
-  erofs + overlay-/etc layout on x86.
+- [~] **M2 - UI shell**: **rendering + autostarting in the VM** (screenshots in
+  `output/`). `shell.c` - 48-band gradient wallpaper, 4-zone geometry, tint+border
+  framed panes (thickness scales to output), client confined to the centre pane,
+  agent name / state word as FIGlet block text (one scene rect per ink cell,
+  `figlet.c` parser + bundled `banner.flf`). `neuros-comp -k` keeps the shell up
+  without a client. Autostart: getty@tty1 -> `/etc/profile.d/neuros-session.sh`
+  -> `neuros-session` -> `neuros-comp -k -s -d -- foot`.
+  Blockers/next: **C.UTF-8 locale** foot needs (`BR2_GENERATE_LOCALE`, building -
+  one-time glibc source fetch for host-localedef); small mono text (strip clock,
+  "using <tool>") via fcft; lockscreen (`ext-session-lock-v1`); erofs + overlay-
+  /etc layout on x86.
 - [ ] **M2 - UI shell**: the static 4-zone shell (see "UI shell (v0)") - thin
   time/date/battery strip, top agent/model pane, center pane, bottom state pane;
   `.flf` parser + GLES glyph atlas for the FIGlet panes; embedded VT in the
