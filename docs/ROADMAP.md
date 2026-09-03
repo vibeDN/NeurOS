@@ -6,7 +6,8 @@
   Not an Android fork, not a Debian/Alpine/pmOS fork.
 - Target 1 (now): **x86_64**, runs in VirtualBox/QEMU. Development happens here
   while the phone's bootloader unlock window is still closed (~2026-09-10).
-- Target 2 (later): **aarch64 / Redmi Note 10 Pro 4G "sweet"** (SM6150, Adreno 618).
+- Target 2 (later): **aarch64 / Redmi Note 10 Pro 4G "sweet"** (SM6150, Adreno 618;
+  8 GB RAM variant + 4 GB zram swap configured -> ~12 GB effective budget).
 - Init: **systemd** (logind seats/sessions for the compositor; unit management for
   the agent runtime). Forces a glibc toolchain.
 - UI: our own **wlroots-based Wayland compositor** on DRM/KMS + GBM. FIGlet-style
@@ -59,7 +60,7 @@ against what's in the dump. Produces the firmware manifest for target 2.
 ## Locked details
 
 - **Compositor language: C** (wlroots native). Smallest dependency surface on ARM.
-- **Per-agent memory**: `/home/<agent>/memory/{you,topics,areas}/*.md`. The
+- **Per-agent memory**: `/home/<agent>/memory/{you,topics,area}/*.md`. The
   `/home/<agent>` dir is created lazily the first time that agent's CLI is used
   (open the Claude CLI -> `/home/claude/` appears). Isolated per agent; cross-read
   is an on-demand tool, not default.
@@ -90,12 +91,13 @@ Vosk (Kaldi, streaming, per language):
 | large (ru/en)|  1.5-2.4 GB | 4-6 GB     | moderate   | streaming, better accuracy  |
 | +punct model |  15-30 MB   | ~200 MB    | light      | optional recase/punct step  |
 
-**Decision:**
-- Default = **Vosk small, ru + en** (~100 MB, negligible CPU/RAM). Always-on
-  listening, wake phrase, short commands; streaming partials drive the status UI.
-- Opt-in high accuracy = **whisper.cpp base q5_1** (~57 MB, ~realtime) for long
-  dictation, run on demand. `small` only if ~2x latency is acceptable.
-- medium/large: not on device.
+**Decision** (device is the 8 GB RAM sweet variant + 4 GB zram swap -> ~12 GB budget):
+- Primary STT = **whisper.cpp `small`, f16 (no quantization)** - ~466 MB disk,
+  ~950 MB RAM, ~2x RTF. Fits the budget comfortably; best accuracy we can run.
+- **Vosk small (ru+en)** stays as the cheap always-on front-end: VAD + wake
+  phrase gate. It never transcribes for real - it just decides when to hand a
+  segment to whisper. Solves whisper's non-streaming latency for wake/commands.
+- medium/large whisper, and vosk-large: not on device.
 - Piper TTS for reference: ~20-65 MB/voice, ~50-150 MB RAM, faster than realtime.
 
 ## Open questions
