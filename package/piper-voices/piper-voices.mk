@@ -15,6 +15,11 @@ PIPER_VOICES_EXTRA_DOWNLOADS = \
 	$(PIPER_VOICES_HF)/ru/ru_RU/ruslan/medium/ru_RU-ruslan-medium.onnx \
 	$(PIPER_VOICES_HF)/ru/ru_RU/ruslan/medium/ru_RU-ruslan-medium.onnx.json
 
+# sources are raw data files, not archives - skip extraction
+define PIPER_VOICES_EXTRACT_CMDS
+	mkdir -p $(@D)
+endef
+
 define PIPER_VOICES_INSTALL_TARGET_CMDS
 	mkdir -p $(TARGET_DIR)/usr/share/piper-voices
 	$(INSTALL) -D -m 0644 $(PIPER_VOICES_DL_DIR)/en_US-ryan-medium.onnx \
