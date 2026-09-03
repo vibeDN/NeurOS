@@ -56,10 +56,50 @@ against what's in the dump. Produces the firmware manifest for target 2.
   bring up display -> touch -> wifi -> GPU -> camera -> modem, in that order.
 - [ ] **M7 - VPN**: Happ cross-compiled from source for aarch64.
 
+## Locked details
+
+- **Compositor language: C** (wlroots native). Smallest dependency surface on ARM.
+- **Per-agent memory**: `/home/<agent>/memory/{you,topics,areas}/*.md`. The
+  `/home/<agent>` dir is created lazily the first time that agent's CLI is used
+  (open the Claude CLI -> `/home/claude/` appears). Isolated per agent; cross-read
+  is an on-demand tool, not default.
+- **Bundled on-device MCP tools** (Python, `fastmcp`-based, live in `/home/chatgpt`
+  now, MIT, vibeDN repos): `mcp-paint` (TTY Ibis Paint - layered raster canvas,
+  deps: skia-python [aarch64 wheels exist] + numpy) and `NeuroCut` (TTY CapCut -
+  multi-track editor, deps: system MLT `mlt7` + ffmpeg + fontconfig + pillow).
+  Agents connect to them as MCP servers. NeuroCut is the heavier ARM build
+  (ffmpeg + MLT); Buildroot has `mlt`, `ffmpeg`, `fontconfig`, `python-pillow`.
+  `NeuroGen` (media generation) is cloud-API only - not bundled on device.
+
+## STT sizing (SD732G, CPU only, phone also running compositor + agent CLI + Piper)
+
+whisper.cpp (multilingual GGML) - disk / peak RAM / rough real-time factor:
+
+| model  | f16 disk | f16 RAM | q5_1 disk | q5_1 RAM | RTF (q5_1) |
+|--------|---------:|--------:|----------:|---------:|-----------:|
+| tiny   |   75 MB  | ~275 MB |   ~31 MB  | ~180 MB  | ~0.4x      |
+| base   |  142 MB  | ~390 MB |   ~57 MB  | ~230 MB  | ~0.8x      |
+| small  |  466 MB  | ~950 MB |  ~181 MB  | ~600 MB  | ~2x        |
+| medium |  1.5 GB  | ~2.6 GB |  ~514 MB  | ~1.5 GB  | ~6x        |
+
+Vosk (Kaldi, streaming, per language):
+
+| model        | disk        | RAM        | CPU        | notes                       |
+|--------------|------------:|-----------:|-----------:|-----------------------------|
+| small (ru/en)|  40-50 MB   | 250-500 MB | very light | partials; no punct/casing   |
+| large (ru/en)|  1.5-2.4 GB | 4-6 GB     | moderate   | streaming, better accuracy  |
+| +punct model |  15-30 MB   | ~200 MB    | light      | optional recase/punct step  |
+
+**Decision:**
+- Default = **Vosk small, ru + en** (~100 MB, negligible CPU/RAM). Always-on
+  listening, wake phrase, short commands; streaming partials drive the status UI.
+- Opt-in high accuracy = **whisper.cpp base q5_1** (~57 MB, ~realtime) for long
+  dictation, run on demand. `small` only if ~2x latency is acceptable.
+- medium/large: not on device.
+- Piper TTS for reference: ~20-65 MB/voice, ~50-150 MB RAM, faster than realtime.
+
 ## Open questions
 
-- Compositor language: C (wlroots native) vs Rust (smithay). Leaning wlroots/C
-  for the smallest dependency surface on ARM.
 - Writable storage layout: read-only squashfs root + overlayfs, vs plain ext4.
   The AI CLIs self-update and write memory, so at least `/opt` + `/home` writable.
-- STT: whisper.cpp (heavier, better) vs vosk (lighter). TBD on 732G budget.
+- MLT python bindings in Buildroot (`BR2_PACKAGE_MLT` + swig/python) - verify.
