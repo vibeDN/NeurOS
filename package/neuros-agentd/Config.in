@@ -1,0 +1,9 @@
+config BR2_PACKAGE_NEUROS_AGENTD
+	bool "neuros-agentd"
+	select BR2_PACKAGE_TMUX
+	help
+	  NeurOS agent orchestrator. Runs the selected AI agent CLI inside a
+	  tmux session, tees its output to the TTS filter, injects STT
+	  transcripts, and drives the compositor's status panes via neuros-ctl.
+
+	  Prototype: POSIX shell. Becomes Rust once the design settles.

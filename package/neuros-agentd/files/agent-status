@@ -1,0 +1,14 @@
+#!/bin/sh
+# Read one line of agent output, print a status word (or nothing).
+# Patterns target the Claude Code TUI; extended per-agent later.
+read -r l || exit 0
+case "$l" in
+	*"esc to interrupt"*|*"tokens"*"esc"*|*"Running"*|*"Bash("*|*"Edit("*|*"Write("*|*"Update("*)
+		echo Working ;;
+	*"Thinking"*|*"Pondering"*|*"Deliberating"*|*"✻"*|*"Puzzling"*)
+		echo Thinking ;;
+	*"Do you want"*|*"(y/n)"*|*"Continue?"*|*"❯ 1."*|*"Proceed"*)
+		echo Waiting ;;
+	*"? for shortcuts"*|*"Bypassing"*|*"╰────"*)
+		echo Idle ;;
+esac

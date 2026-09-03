@@ -1,5 +1,6 @@
 menu "NeurOS packages"
 
 source "$BR2_EXTERNAL_NEUROS_PATH/package/neuros-comp/Config.in"
+source "$BR2_EXTERNAL_NEUROS_PATH/package/neuros-agentd/Config.in"
 
 endmenu

@@ -1,0 +1,20 @@
+#!/bin/sh
+# Stand-in for a real agent CLI until Claude Code is in the image. Emits the
+# kinds of lines agent-status keys on, so the M3 pipeline can be exercised.
+printf '\n  NeurOS mock agent - type something, or wait.\n\n'
+printf '? for shortcuts\n'
+
+while :; do
+	printf '\n> '
+	if IFS= read -r line; then
+		[ "$line" = "quit" ] && exit 0
+		printf '\n  Thinking...\n'
+		sleep 1
+		printf '  Bash(echo hi)  esc to interrupt\n'
+		sleep 1
+		printf '\n  Here is a **reply** with `code` and a [link](https://x).\n'
+		printf '? for shortcuts\n'
+	else
+		sleep 5
+	fi
+done

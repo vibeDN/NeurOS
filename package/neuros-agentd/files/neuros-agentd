@@ -1,0 +1,60 @@
+#!/bin/sh
+# NeurOS agent orchestrator (prototype).
+#
+# - runs the selected agent CLI inside a tmux session ("agent")
+# - tees the pane output to the TTS filter and a status classifier
+# - drives the compositor panes through neuros-ctl
+#
+# The centre-pane terminal shows this session via `tmux attach -t agent`.
+set -u
+
+CONF=/etc/neuros/agentd.conf
+[ -r "$CONF" ] && . "$CONF"
+: "${AGENT_NAME:=Agent}"
+: "${AGENT_CMD:=/usr/lib/neuros/mock-agent}"
+: "${TMUX_SESSION:=agent}"
+
+RT="${XDG_RUNTIME_DIR:-/run/user/0}/neuros"
+mkdir -p "$RT"
+RAW="$RT/agent.raw"
+TTS="$RT/tts.txt"
+: > "$RAW"
+: > "$TTS"
+
+log() { echo "[agentd] $*" >&2; }
+
+# wait (briefly) for the compositor control socket
+i=0
+while [ ! -S "${XDG_RUNTIME_DIR:-/run/user/0}/neuros-comp.sock" ] && [ $i -lt 50 ]; do
+	sleep 0.2
+	i=$((i + 1))
+done
+
+# (re)create the agent session
+if ! tmux has-session -t "$TMUX_SESSION" 2>/dev/null; then
+	log "starting agent: $AGENT_CMD"
+	tmux new-session -d -s "$TMUX_SESSION" -x 220 -y 50 "$AGENT_CMD"
+	tmux set-option -t "$TMUX_SESSION" status off
+fi
+
+neuros-ctl agent "$AGENT_NAME" 2>/dev/null || true
+neuros-ctl status Idle 2>/dev/null || true
+
+# tee the pane; -O = also capture existing scrollback
+tmux pipe-pane -t "$TMUX_SESSION" -O "cat >> '$RAW'"
+
+# process the stream: TTS filter + status classification
+tail -n0 -F "$RAW" 2>/dev/null | while IFS= read -r line; do
+	printf '%s\n' "$line" | /usr/lib/neuros/tts-filter >> "$TTS"
+	st=$(printf '%s\n' "$line" | /usr/lib/neuros/agent-status)
+	[ -n "$st" ] && neuros-ctl status "$st" 2>/dev/null || true
+done &
+WATCH=$!
+
+# exit with the agent session
+while tmux has-session -t "$TMUX_SESSION" 2>/dev/null; do
+	sleep 2
+done
+kill "$WATCH" 2>/dev/null
+neuros-ctl status Idle 2>/dev/null || true
+log "agent session ended"

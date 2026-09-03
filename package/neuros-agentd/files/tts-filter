@@ -1,0 +1,16 @@
+#!/bin/sh
+# Strip Markdown / ANSI so Piper doesn't read "asterisk asterisk". Line-oriented.
+exec sed -E '
+	s/\x1b\[[0-9;?]*[a-zA-Z]//g;      # ANSI escapes
+	s/```[A-Za-z0-9_-]*//g;            # code fence markers
+	s/`([^`]*)`/\1/g;                  # inline code
+	s/\*\*([^*]+)\*\*/\1/g;            # bold
+	s/__([^_]+)__/\1/g;
+	s/\*([^*]+)\*/\1/g;               # italic
+	s/^[[:space:]]*#+[[:space:]]+//;   # headings
+	s/^[[:space:]]*[-*+][[:space:]]+/ /;   # bullets
+	s/\[([^]]+)\]\([^)]+\)/\1/g;       # links -> text
+	s/^[[:space:]]*[0-9]+\.[[:space:]]+/ /;   # ordered list
+	s/\|/ /g;                          # table pipes
+	s/[[:space:]]+/ /g;
+'

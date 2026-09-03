@@ -26,5 +26,21 @@ fi
 
 # centre pane: a terminal for now (becomes the agent CLI host in M3)
 export TERM=foot
+
+# M3: the agent orchestrator owns a tmux session ("agent"); the centre-pane
+# terminal attaches to it. Start agentd in the background first.
+if [ -x /usr/lib/neuros/neuros-agentd ]; then
+	/usr/lib/neuros/neuros-agentd &
+	i=0
+	while ! tmux has-session -t agent 2>/dev/null && [ $i -lt 25 ]; do
+		sleep 0.2
+		i=$((i + 1))
+	done
+fi
+
 # -d: server-side decorations -> foot draws no titlebar in the centre pane
-exec neuros-comp -k -s -d "$@" -- foot
+if tmux has-session -t agent 2>/dev/null; then
+	exec neuros-comp -k -s -d "$@" -- foot tmux attach -t agent
+else
+	exec neuros-comp -k -s -d "$@" -- foot
+fi
