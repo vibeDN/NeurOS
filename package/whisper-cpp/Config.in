@@ -1,0 +1,12 @@
+config BR2_PACKAGE_WHISPER_CPP
+	bool "whisper-cpp (STT)"
+	depends on BR2_INSTALL_LIBSTDCPP
+	depends on BR2_TOOLCHAIN_HAS_THREADS
+	help
+	  whisper.cpp - OpenAI Whisper speech-to-text, built from source.
+	  Installs whisper-cli. Models (ggml-*.bin) are shipped separately.
+
+	  https://github.com/ggml-org/whisper.cpp
+
+comment "whisper-cpp needs a toolchain w/ C++ and threads"
+	depends on !BR2_INSTALL_LIBSTDCPP || !BR2_TOOLCHAIN_HAS_THREADS

@@ -1,0 +1,7 @@
+config BR2_PACKAGE_WHISPER_MODEL
+	bool "whisper-model (small, multilingual, f16)"
+	depends on BR2_PACKAGE_WHISPER_CPP
+	help
+	  ggml-small.bin - Whisper small multilingual model, f16 (~466 MB).
+	  Installed to /usr/share/whisper-models/. This is NeurOS's chosen
+	  STT model (no quantization).

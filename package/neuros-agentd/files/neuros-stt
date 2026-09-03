@@ -1,0 +1,25 @@
+#!/bin/sh
+# Transcribe a WAV (16 kHz mono) with whisper.cpp and inject the text into the
+# agent's tmux session. Usage: neuros-stt <file.wav>
+# (mic capture + VAD comes later; this is the manual/prototype path.)
+set -u
+
+WAV="${1:-}"
+MODEL="${WHISPER_MODEL:-/usr/share/whisper-models/ggml-small.bin}"
+SESSION="${TMUX_SESSION:-agent}"
+
+[ -r "$WAV" ] || { echo "neuros-stt: no such file: $WAV" >&2; exit 1; }
+[ -r "$MODEL" ] || { echo "neuros-stt: no model at $MODEL" >&2; exit 1; }
+command -v whisper-cli >/dev/null || { echo "neuros-stt: whisper-cli missing" >&2; exit 1; }
+
+text=$(whisper-cli -m "$MODEL" -f "$WAV" -nt -np -l auto 2>/dev/null |
+	tr '\n' ' ' | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//; s/[[:space:]]+/ /g')
+
+[ -n "$text" ] || { echo "neuros-stt: (no speech)" >&2; exit 0; }
+echo "neuros-stt: \"$text\"" >&2
+
+if tmux has-session -t "$SESSION" 2>/dev/null; then
+	tmux send-keys -t "$SESSION" -l "$text"
+	tmux send-keys -t "$SESSION" Enter
+fi
+printf '%s\n' "$text"
