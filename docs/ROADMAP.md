@@ -178,14 +178,21 @@ minimal Android property/HAL container (for camera). Packaged in this BR2_EXTERN
 - [x] **M0 - build chain boots** (x86_64): boots in VirtualBox, systemd reports
   `running` with 0 failed units, autologin root, sshd on :2222. Bootlin external
   toolchain (gcc 14 / glibc). `make config && make && make vm && make run-headless`.
-- [~] **M1 - graphics stack**: mesa3d 26, libdrm, wlroots 0.19.2, libseat,
-  libinput, libxkbcommon in the image. `package/neuros-comp` = fork of cage 0.2.1,
-  **builds and runs** in the VM (headless backend, Wayland display up, child
-  spawn/reap OK). VirtualBox has no 3D -> wlroots falls back to the **pixman
-  software renderer**; adding **llvmpipe** for GLES2-in-software (LLVM build,
-  ~30min, cached). `/dev/dri/card0` present (vmwgfx).
-  Still to do: llvmpipe build; DRM backend test (needs a GUI VM or 3D accel);
-  erofs + overlay-/etc layout on x86; busybox `timeout` (not built).
+- [x] **M1 - graphics stack**: mesa3d 26, libdrm, wlroots 0.19.2, libseat,
+  libinput, libxkbcommon, **foot** + DejaVu Mono in the image. `package/neuros-comp`
+  = fork of cage 0.2.1, builds and runs in the VM (headless backend, Wayland
+  display up, child spawn/reap OK). VBox exposes no 3D -> **llvmpipe** added for
+  GLES2-in-software (LLVM building now). `/dev/dri/card0` (vmwgfx) present.
+- [~] **M2 - UI shell**: `shell.c` done - 48-band gradient wallpaper, 4-zone
+  geometry (strip/top/centre/bottom), tint+border framed panes (thickness scales
+  to output), client confined to the centre pane. `figlet.c` - `.flf` parser
+  (tested on the host); agent name + state word drawn as one scene rect per ink
+  cell; `banner.flf` bundled. `neuros-session` autostarts `neuros-comp -- foot`
+  on tty1. *(pending the llvmpipe build to do the first visual check via
+  `VBoxManage screenshotpng`)*
+  Still to do: visual verify + tune; small mono text (strip, "using <tool>") via
+  fcft; lockscreen (`ext-session-lock-v1`); compositor-persists-without-child;
+  erofs + overlay-/etc layout on x86.
 - [ ] **M2 - UI shell**: the static 4-zone shell (see "UI shell (v0)") - thin
   time/date/battery strip, top agent/model pane, center pane, bottom state pane;
   `.flf` parser + GLES glyph atlas for the FIGlet panes; embedded VT in the
