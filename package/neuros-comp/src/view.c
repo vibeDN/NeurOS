@@ -76,13 +76,16 @@ view_position(struct cg_view *view)
 	 * frame border. Fall back to the full output before the shell is laid out. */
 	struct wlr_box target = layout_box;
 	struct ng_shell *shell = view->server->shell;
-	if (shell && shell->center_box.width > 2 * NG_FRAME_PX && shell->center_box.height > 2 * NG_FRAME_PX) {
-		target = (struct wlr_box){
-			.x = shell->center_box.x + NG_FRAME_PX,
-			.y = shell->center_box.y + NG_FRAME_PX,
-			.width = shell->center_box.width - 2 * NG_FRAME_PX,
-			.height = shell->center_box.height - 2 * NG_FRAME_PX,
-		};
+	if (shell) {
+		int t = shell->frame_t > 0 ? shell->frame_t : NG_FRAME_PX;
+		if (shell->center_box.width > 2 * t && shell->center_box.height > 2 * t) {
+			target = (struct wlr_box){
+				.x = shell->center_box.x + t,
+				.y = shell->center_box.y + t,
+				.width = shell->center_box.width - 2 * t,
+				.height = shell->center_box.height - 2 * t,
+			};
+		}
 	}
 
 	view_maximize(view, &target);

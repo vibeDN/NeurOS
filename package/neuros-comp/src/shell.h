@@ -1,5 +1,6 @@
 /*
- * NeurOS compositor - the on-screen shell (4-zone layout + gradient wallpaper).
+ * NeurOS compositor - the on-screen shell (4-zone layout + gradient wallpaper
+ * + FIGlet status text).
  *
  * Fork of cage; this file is NeurOS-specific. MIT.
  */
@@ -9,44 +10,58 @@
 #include <wlr/types/wlr_scene.h>
 #include <wlr/util/box.h>
 
+#include "figlet.h"
+
 struct cg_server;
 
 #define NG_GRADIENT_BANDS 48
 #define NG_FRAME_PX       6
+#define NG_FONT_PATH      "/usr/share/neuros/fonts/neuros-banner.flf"
+
+/* A block of FIGlet text drawn as one scene rect per "ink" cell. */
+struct ng_textblock {
+	struct wlr_scene_tree *tree;
+	struct wlr_scene_rect **cell;
+	int n_cell;
+	char *text;
+	float color[4];
+};
 
 struct ng_shell {
 	struct cg_server *server;
+	struct wlr_scene_tree *tree; /* chrome, below the views */
 
-	/* chrome lives under here, below the views tree */
-	struct wlr_scene_tree *tree;
+	struct flf_font *font;
 
-	/* wallpaper: a vertical stack of solid bands approximating a 2-stop lerp */
 	struct wlr_scene_rect *band[NG_GRADIENT_BANDS];
 	float top_color[4];
 	float bottom_color[4];
 
-	/* frame borders (each: bg rect + we inset the content) */
-	struct wlr_scene_rect *top_frame;
-	struct wlr_scene_rect *center_frame;
-	struct wlr_scene_rect *bottom_frame;
-	struct wlr_scene_rect *center_inner;
+	struct ng_frame {
+		struct wlr_scene_rect *tint;    /* subtle dark wash over the wallpaper */
+		struct wlr_scene_rect *edge[4]; /* top, bottom, left, right border */
+	} top_frame, center_frame, bottom_frame;
 
-	/* computed zone boxes in layout coords */
-	struct wlr_box strip_box;   /* time/date/battery */
-	struct wlr_box top_box;     /* agent name + model */
-	struct wlr_box center_box;  /* the embedded client goes here */
-	struct wlr_box bottom_box;  /* state + activity */
+	struct ng_textblock agent;  /* top pane  */
+	struct ng_textblock status; /* bottom pane */
+
+	struct wlr_box strip_box;
+	struct wlr_box top_box;
+	struct wlr_box center_box;
+	struct wlr_box bottom_box;
 
 	int width, height;
+	int frame_t; /* border thickness, scaled to the output */
 };
 
 struct ng_shell *ng_shell_create(struct cg_server *server);
 void ng_shell_destroy(struct ng_shell *shell);
 
-/* Recompute zone geometry for a W x H output and reposition every node. */
 void ng_shell_layout(struct ng_shell *shell, int width, int height);
-
-/* Set the wallpaper stops (RGBA, 0..1, straight alpha) and rebuild bands. */
 void ng_shell_set_colors(struct ng_shell *shell, const float top[4], const float bottom[4]);
+
+/* Big block text in the top / bottom panes. Re-rendered immediately. */
+void ng_shell_set_agent(struct ng_shell *shell, const char *name);
+void ng_shell_set_status(struct ng_shell *shell, const char *state);
 
 #endif
