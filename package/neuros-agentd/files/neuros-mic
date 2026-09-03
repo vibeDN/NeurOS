@@ -1,0 +1,14 @@
+#!/bin/sh
+# Toggle the always-listening mic stream (neuros-listen watches the flag).
+RT="${XDG_RUNTIME_DIR:-/run/user/0}/neuros"
+mkdir -p "$RT"
+FLAG="$RT/listen"
+
+case "${1:-toggle}" in
+on)     : > "$FLAG" ;;
+off)    rm -f "$FLAG" ;;
+toggle) [ -e "$FLAG" ] && rm -f "$FLAG" || : > "$FLAG" ;;
+*)      echo "usage: neuros-mic on|off|toggle" >&2; exit 2 ;;
+esac
+
+if [ -e "$FLAG" ]; then echo "mic: on"; else echo "mic: off"; fi

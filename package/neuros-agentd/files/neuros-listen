@@ -1,0 +1,50 @@
+#!/bin/sh
+# Mic listener: while /run/neuros/listen exists, record windows, run whisper.cpp
+# with Silero VAD, and inject any speech into the agent's tmux session.
+#
+# Toggle with `neuros-mic on|off|toggle`. Recording window is coarse (fixed
+# seconds) - fine for the prototype; proper streaming endpointing comes later.
+set -u
+
+[ -r /etc/neuros/agentd.conf ] && . /etc/neuros/agentd.conf
+: "${TMUX_SESSION:=agent}"
+: "${STT_MODEL:=/usr/share/whisper-models/ggml-small.bin}"
+: "${STT_VAD:=/usr/share/whisper-models/ggml-silero-v5.1.2.bin}"
+: "${STT_WINDOW:=5}"
+
+RT="${XDG_RUNTIME_DIR:-/run/user/0}/neuros"
+mkdir -p "$RT"
+FLAG="$RT/listen"
+CHUNK="$RT/chunk.wav"
+
+log() { echo "[listen] $*" >&2; }
+
+command -v whisper-cli >/dev/null || { log "no whisper-cli"; exit 1; }
+command -v arecord >/dev/null || { log "no arecord"; exit 1; }
+[ -r "$STT_MODEL" ] || { log "no model $STT_MODEL"; exit 1; }
+
+VADOPT=""
+[ -r "$STT_VAD" ] && VADOPT="--vad -vm $STT_VAD"
+
+log "ready (model=$(basename "$STT_MODEL"), vad=$([ -n "$VADOPT" ] && echo yes || echo no))"
+
+while :; do
+	[ -e "$FLAG" ] || { sleep 0.5; continue; }
+
+	arecord -q -f S16_LE -r 16000 -c 1 -d "$STT_WINDOW" "$CHUNK" 2>/dev/null || { sleep 1; continue; }
+	[ -e "$FLAG" ] || continue
+
+	text=$(whisper-cli -m "$STT_MODEL" -f "$CHUNK" $VADOPT -nt -np -l auto 2>/dev/null |
+		tr '\n' ' ' | sed -E 's/^ +//; s/ +$//; s/ +/ /g')
+
+	case "$text" in
+	"" | "[BLANK_AUDIO]" | "["* | "("*) continue ;;
+	esac
+	[ "${#text}" -ge 3 ] || continue
+
+	log "\"$text\""
+	if tmux has-session -t "$TMUX_SESSION" 2>/dev/null; then
+		tmux send-keys -t "$TMUX_SESSION" -l "$text"
+		tmux send-keys -t "$TMUX_SESSION" Enter
+	fi
+done

@@ -36,6 +36,9 @@ if [ -x /usr/lib/neuros/neuros-agentd ]; then
 	done
 fi
 
+# mic listener (idle until `neuros-mic on`)
+[ -x /usr/lib/neuros/neuros-listen ] && /usr/lib/neuros/neuros-listen &
+
 # -d: server-side decorations -> foot draws no titlebar in the centre pane
 if tmux has-session -t agent 2>/dev/null; then
 	exec neuros-comp -k -s -d "$@" -- foot tmux attach -t agent
