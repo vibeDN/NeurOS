@@ -1,17 +1,14 @@
 #!/bin/sh
-# Start the NeurOS compositor on the seat. Invoked on tty1 (see
-# /etc/profile.d/neuros-session.sh). Kept minimal for M2 bring-up; a proper
-# systemd seat service replaces this later.
+# NeurOS compositor session - ExecStart of neuros-comp.service. systemd owns the
+# lifecycle (single instance) and the tty1 seat.
 set -e
 
 export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/0}"
 mkdir -p "$XDG_RUNTIME_DIR"
 chmod 700 "$XDG_RUNTIME_DIR"
 
-# clean up any stale session left by a previous getty cycle
-for p in $(pidof neuros-comp 2>/dev/null); do kill "$p" 2>/dev/null || true; done
+# a stale tmux server can linger across a service restart
 tmux kill-server 2>/dev/null || true
-sleep 0.3
 
 # a UTF-8 locale is mandatory for foot/fcft
 export LANG="${LANG:-C.UTF-8}"
@@ -29,11 +26,10 @@ else
 	export LIBSEAT_BACKEND="${LIBSEAT_BACKEND:-builtin}"
 fi
 
-# centre pane: a terminal for now (becomes the agent CLI host in M3)
 export TERM=foot
 
 # M3: the agent orchestrator owns a tmux session ("agent"); the centre-pane
-# terminal attaches to it. Start agentd in the background first.
+# terminal attaches to it. Start agentd first (it creates the session).
 if [ -x /usr/lib/neuros/neuros-agentd ]; then
 	/usr/lib/neuros/neuros-agentd &
 	i=0
