@@ -6,7 +6,7 @@ BR2_x86_64=y
 # Toolchain: glibc + C++ (systemd, wayland stack, node all need glibc)
 BR2_TOOLCHAIN_BUILDROOT_GLIBC=y
 BR2_TOOLCHAIN_BUILDROOT_CXX=y
-BR2_PACKAGE_HOST_LINUX_HEADERS_CUSTOM_6_12=y
+BR2_KERNEL_HEADERS_AS_KERNEL=y
 
 # Init: systemd (logind seats/sessions for the compositor, unit mgmt for agentd)
 BR2_INIT_SYSTEMD=y
