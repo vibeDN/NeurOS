@@ -23,19 +23,19 @@ TTS="$RT/tts.txt"
 
 log() { echo "[agentd] $*" >&2; }
 
-# wait (briefly) for the compositor control socket
-i=0
-while [ ! -S "${XDG_RUNTIME_DIR:-/run/user/0}/neuros-comp.sock" ] && [ $i -lt 50 ]; do
-	sleep 0.2
-	i=$((i + 1))
-done
-
-# (re)create the agent session
+# 1. create the agent session immediately - neuros-session is waiting on it
 if ! tmux has-session -t "$TMUX_SESSION" 2>/dev/null; then
 	log "starting agent: $AGENT_CMD"
 	tmux new-session -d -s "$TMUX_SESSION" -x 220 -y 50 "$AGENT_CMD"
 	tmux set-option -t "$TMUX_SESSION" status off
 fi
+
+# 2. now wait (briefly) for the compositor control socket
+i=0
+while [ ! -S "${XDG_RUNTIME_DIR:-/run/user/0}/neuros-comp.sock" ] && [ $i -lt 100 ]; do
+	sleep 0.2
+	i=$((i + 1))
+done
 
 neuros-ctl agent "$AGENT_NAME" 2>/dev/null || true
 neuros-ctl status Idle 2>/dev/null || true

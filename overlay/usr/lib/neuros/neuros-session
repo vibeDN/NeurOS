@@ -8,6 +8,11 @@ export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/0}"
 mkdir -p "$XDG_RUNTIME_DIR"
 chmod 700 "$XDG_RUNTIME_DIR"
 
+# clean up any stale session left by a previous getty cycle
+for p in $(pidof neuros-comp 2>/dev/null); do kill "$p" 2>/dev/null || true; done
+tmux kill-server 2>/dev/null || true
+sleep 0.3
+
 # a UTF-8 locale is mandatory for foot/fcft
 export LANG="${LANG:-C.UTF-8}"
 export LC_ALL="${LC_ALL:-C.UTF-8}"
@@ -32,8 +37,8 @@ export TERM=foot
 if [ -x /usr/lib/neuros/neuros-agentd ]; then
 	/usr/lib/neuros/neuros-agentd &
 	i=0
-	while ! tmux has-session -t agent 2>/dev/null && [ $i -lt 25 ]; do
-		sleep 0.2
+	while ! tmux has-session -t agent 2>/dev/null && [ $i -lt 100 ]; do
+		sleep 0.1
 		i=$((i + 1))
 	done
 fi
