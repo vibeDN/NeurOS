@@ -180,7 +180,7 @@ static void
 bigtext_render(struct ng_shell *shell, struct wlr_scene_buffer *node, const char *text, const struct wlr_box *box,
 	       int cy)
 {
-	figtext_render(shell, node, text, box, cy, 90);
+	figtext_render(shell, node, text, box, cy, 78);
 }
 
 /* -- small mono text (strip / model / activity) ------------------------ */
@@ -226,7 +226,7 @@ ng_shell_create(struct cg_server *server)
 	if (!fcft_ready)
 		fcft_ready = fcft_init(FCFT_LOG_COLORIZE_NEVER, false, FCFT_LOG_CLASS_ERROR);
 	const char *mono[] = {NG_MONO_FONT};
-	shell->strip_font = fcft_from_name(1, mono, "size=13");
+	shell->strip_font = fcft_from_name(1, mono, "size=22");
 	if (!shell->strip_font)
 		wlr_log(WLR_ERROR, "ng_shell: no %s", NG_MONO_FONT);
 
@@ -862,7 +862,7 @@ ng_shell_layout(struct ng_shell *shell, int width, int height)
 	if (strip_h < 20)
 		strip_h = 20;
 	int dots_h = height / 44;
-	int pane_h = height * 205 / 1000;
+	int pane_h = height * 175 / 1000;
 
 	int x = margin, w = width - 2 * margin, y = margin;
 
