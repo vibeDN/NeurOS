@@ -298,6 +298,25 @@ minimal Android property/HAL container (for camera). Packaged in this BR2_EXTERN
 - **AVB**: disable verification **permanently** (patch/empty `vbmeta`). No own
   key, no signing, no re-lock - user does not want to re-lock the bootloader.
 
+## Resolved (2026-09-04, batch 6)
+
+- **Terminal colour**: tmux's default `TERM=screen` (8 colours) was washing out
+  the agent TUI. `/etc/tmux.conf` forces `screen-256color` + `terminal-overrides
+  ",*:Tc"`; agentd exports `COLORTERM=truecolor` into the su'd agent env.
+- **Orange mascot**: Claude Code hard-codes its mascot to 256-colour index 174
+  (`#d787af`, pink) - `foot.ini` repoints index 174 -> `#D97757`. Per-agent
+  palette theming when other agents land.
+- **fastfetch** (`package/fastfetch`, replaces neofetch): minimal build; the
+  Bootlin 5.4 kernel headers miss `drm_nouveau_getparam` so `gpu_drm.c` is
+  stubbed (post-extract hook). `neurofetch` wrapper -> per-agent logo
+  (`/usr/share/neuros/logos/<agent>.txt`, else `robot.txt`) + accent colour;
+  fish greeting runs it. Logo `$1` = accent.
+- **`make vm-phone`**: a second VM (`NeurOS-phone`, ssh :2223, 6G) at the sweet
+  panel's **1080x2400** (20:9). `neuros-session` resolves the output mode from
+  `display.conf` -> `neuros.mode=` kernel arg (new grub entry) -> DMI product
+  `NeurOS-phone-WxH` (set by make-vm.sh) -> `NEUROS_OUTPUT_MODE`. Boots straight
+  to portrait, no grub pick.
+
 ## Resolved (2026-09-04, batch 5)
 
 - **Big display font**: **FIGlet `slant`** (Glenn Chappell), not Doto - user's
