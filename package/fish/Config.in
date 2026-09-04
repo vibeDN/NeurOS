@@ -1,0 +1,22 @@
+config BR2_PACKAGE_FISH
+	bool "fish (interactive shell)"
+	depends on BR2_INSTALL_LIBSTDCPP
+	depends on BR2_TOOLCHAIN_HAS_THREADS
+	depends on BR2_USE_WCHAR
+	depends on !BR2_STATIC_LIBS
+	select BR2_PACKAGE_NCURSES
+	select BR2_PACKAGE_NCURSES_WCHAR
+	select BR2_PACKAGE_PCRE2
+	select BR2_PACKAGE_PCRE2_32 # fish links libpcre2-32 (wchar_t width)
+	help
+	  fish - the friendly interactive shell. Autosuggestions, syntax
+	  highlighting, sane scripting. Used as the interactive login shell
+	  on NeurOS (the agent CLI still runs under /bin/sh).
+
+	  Last C++/CMake release line (4.x is Rust); tracks 3.7.x.
+
+	  https://fishshell.com
+
+comment "fish needs a toolchain w/ C++, threads, wchar, dynamic libs"
+	depends on !BR2_INSTALL_LIBSTDCPP || !BR2_TOOLCHAIN_HAS_THREADS \
+		|| !BR2_USE_WCHAR || BR2_STATIC_LIBS

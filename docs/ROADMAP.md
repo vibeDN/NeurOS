@@ -260,11 +260,34 @@ minimal Android property/HAL container (for camera). Packaged in this BR2_EXTERN
   against the dump -> firmware + blob manifest for M5.
 - Stand up an aarch64 Termux chroot on the phone for userspace smoke tests.
 
-## Resolved (2026-09-04, batch 2)
+## Resolved (2026-09-04, batch 3)
 
-- **Claude Code**: bake the normal upstream `claude` CLI (+ shared Node) into the
-  image. It has its own auth (enterprise / API key / account) - first run on the
-  device drives that flow. No custom auth code.
+- **Terminal / shell combo**: `foot` stays as the centre-pane terminal;
+  **`fish`** is root's interactive login shell (serial console + ssh). System
+  scripts + the agent CLI keep explicit `/bin/sh` shebangs.
+  - **`kitty` rejected**: hard-requires desktop OpenGL 3.3 core; NeurOS ships
+    **GLES only** (deliberate - matches the phone's libhybris pipeline, see
+    `MESA3D_OPENGL_ES` w/o `_OPENGL`). Also drags in python3 + a Go build. `foot`
+    is pixman/GLES-native, ~1000x lighter, visually identical for a fullscreen
+    embedded pane. Revisit only if we need kitty's graphics protocol for inline
+    camera frames.
+  - `package/fish/` - fish 3.7.1 (last C++/CMake line; 4.x is Rust). Needs
+    `pcre2-32` (wchar width) + a sed to drop the pre-CMake-3.30 `test` alias.
+- **Claude Code**: bake Anthropic's **self-contained native `claude` binary**
+  (Bun single-file exe, ~205 MB, no Node) via `package/claude-code/`. The binary
+  is copied from the build host's install; **must be strip-excluded**
+  (`BR2_STRIP_EXCLUDE_DIRS=opt/claude-code` - stripping drops the appended JS
+  payload and it silently falls back to the bare Bun runtime).
+  - Auth: `post-build.sh` bakes the build host's `~/.claude/.credentials.json`
+    (OAuth) into `/root/.claude/` **for the dev VM only** - never committed
+    (sourced from `$HOME` at build time; `output/` is git-ignored).
+  - `/root/.claude.json` pre-accepts onboarding + trusts `/root`; settings.json
+    uses `acceptEdits` (bypassPermissions / `--dangerously-skip-permissions` are
+    refused as root - proper fix is a non-root agent user, TODO).
+  - agentd: `AGENT_CMD="claude"`, `AGENT_WORKDIR=/root`, `AGENT_MODEL` -> pill;
+    env disables autoupdater/telemetry (image is read-only).
+- **Old note (superseded)**: "bake upstream `claude` CLI + shared Node, drive the
+  auth flow on device" - replaced by the native binary + baked dev creds above.
 - **Timezone**: `Etc/UTC` (keep). NTP via systemd-timesyncd.
 - **Storage**: implement the erofs ro-root + overlay-/etc + f2fs-data layout on
   the **x86 dev image** (easier to iterate than on the phone).
@@ -282,7 +305,9 @@ minimal Android property/HAL container (for camera). Packaged in this BR2_EXTERN
   dense line-art and blobs when filled). `flf_render_string` + kerning/smushing
   is solid and stays. Both `.flf` bundled; `NG_FONT_PATH` selects.
 - Lockscreen unlock gesture (PIN / any-key / pattern).
-- Camera pane + on-screen mic/camera button placement.
+- **Non-root agent user** so Claude Code can run `bypassPermissions` (autonomous
+  voice flow shouldn't stall on prompts). Ties into per-agent `/home/<agent>/`.
+- Camera pane (centre-panel camera mode + `neuros-camera` action).
 - Pick the exact newest-stable HyperOS fastboot ROM build for sweet.
 - Claw'd mascot: rights request sent to Anthropic (pending).
 

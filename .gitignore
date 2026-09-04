@@ -7,3 +7,10 @@
 # Local scratch
 *.vdi
 *.log
+
+# Never commit auth material (Claude Code creds are baked from $HOME at build
+# time by post-build.sh, straight into output/ - which is already ignored)
+*.credentials.json
+.credentials.json
+secrets/
+overlay-secrets/

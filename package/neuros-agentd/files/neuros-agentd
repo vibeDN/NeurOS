@@ -25,8 +25,9 @@ log() { echo "[agentd] $*" >&2; }
 
 # 1. create the agent session immediately - neuros-session is waiting on it
 if ! tmux has-session -t "$TMUX_SESSION" 2>/dev/null; then
-	log "starting agent: $AGENT_CMD"
-	tmux new-session -d -s "$TMUX_SESSION" -x 220 -y 50 "$AGENT_CMD"
+	log "starting agent: $AGENT_CMD (cwd $AGENT_WORKDIR)"
+	mkdir -p "$AGENT_WORKDIR"
+	tmux new-session -d -s "$TMUX_SESSION" -x 220 -y 50 -c "$AGENT_WORKDIR" "$AGENT_CMD"
 	tmux set-option -t "$TMUX_SESSION" status off
 fi
 
@@ -39,6 +40,7 @@ done
 
 neuros-ctl agent "$AGENT_NAME" 2>/dev/null || true
 neuros-ctl status Idle 2>/dev/null || true
+[ -n "${AGENT_MODEL:-}" ] && neuros-ctl model "$AGENT_MODEL" 2>/dev/null || true
 
 # tee the pane; -O = also capture existing scrollback
 tmux pipe-pane -t "$TMUX_SESSION" -O "cat >> '$RAW'"

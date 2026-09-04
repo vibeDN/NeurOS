@@ -1,0 +1,16 @@
+config BR2_PACKAGE_CLAUDE_CODE
+	bool "claude-code (agent CLI)"
+	depends on BR2_x86_64
+	depends on BR2_TOOLCHAIN_USES_GLIBC
+	select BR2_PACKAGE_CA_CERTIFICATES
+	help
+	  Anthropic's Claude Code CLI - the v1 NeurOS agent. Ships the
+	  self-contained native binary (no Node.js). Auth (OAuth / API key /
+	  enterprise) is provisioned separately into /root/.claude.
+
+	  The binary is taken from the host's installed Claude Code
+	  (~/.local/share/claude/versions/$VERSION); override with
+	  CLAUDE_CODE_BIN=/path on the make command line.
+
+comment "claude-code needs an x86_64 glibc toolchain"
+	depends on !BR2_x86_64 || !BR2_TOOLCHAIN_USES_GLIBC

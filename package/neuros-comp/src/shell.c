@@ -527,19 +527,21 @@ ng_shell_layout(struct ng_shell *shell, int width, int height)
 	node_set(shell->home_node, ng_pill_render(hb_w, hb_h, hb_h / 2, home_col), (width - hb_w) / 2,
 		 height - margin / 2 - hb_h);
 
-	/* centre-panel overlay buttons: camera + mic, stacked bottom-right */
-	int bd = height / 15;
-	if (bd < 30)
-		bd = 30;
-	if (bd > 60)
-		bd = 60;
+	/* centre-panel overlay buttons: small camera + mic pair, bottom-right,
+	 * sitting on the prompt line inside the terminal */
+	int bd = height / 26;
+	if (bd < 22)
+		bd = 22;
+	if (bd > 38)
+		bd = 38;
 	int bpad = bd / 2;
-	int bgap = bd / 4;
-	int bx = shell->center_box.x + shell->center_box.width - bpad - bd;
-	int cam_y = shell->center_box.y + shell->center_box.height - bpad - bd * 2 - bgap;
-	int mic_y = cam_y + bd + bgap;
-	shell->cam_box = (struct wlr_box){bx, cam_y, bd, bd};
-	shell->mic_box = (struct wlr_box){bx, mic_y, bd, bd};
+	int bgap = bd / 3;
+	int inset = shell->panel_rad * 3 / 4; /* match view.c client inset */
+	int by = shell->center_box.y + shell->center_box.height - inset - bpad - bd;
+	int mic_x = shell->center_box.x + shell->center_box.width - inset - bpad - bd;
+	int cam_x = mic_x - bgap - bd;
+	shell->cam_box = (struct wlr_box){cam_x, by, bd, bd};
+	shell->mic_box = (struct wlr_box){mic_x, by, bd, bd};
 
 	float mic_bg[4], mic_ring[4];
 	if (shell->mic_on) {
@@ -555,8 +557,8 @@ ng_shell_layout(struct ng_shell *shell, int width, int height)
 		memcpy(mic_bg, BTN_BG, sizeof(mic_bg));
 		memcpy(mic_ring, BTN_RING, sizeof(mic_ring));
 	}
-	node_set(shell->cam_node, ng_button_render(bd, 0, BTN_BG, BTN_RING, BTN_FG), bx, cam_y);
-	node_set(shell->mic_node, ng_button_render(bd, 1, mic_bg, mic_ring, BTN_FG), bx, mic_y);
+	node_set(shell->cam_node, ng_button_render(bd, 0, BTN_BG, BTN_RING, BTN_FG), cam_x, by);
+	node_set(shell->mic_node, ng_button_render(bd, 1, mic_bg, mic_ring, BTN_FG), mic_x, by);
 	ng_shell_raise_overlay(shell);
 
 	/* reposition the small texts for the new boxes */

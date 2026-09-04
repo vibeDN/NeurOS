@@ -86,6 +86,15 @@ BR2_PACKAGE_DEJAVU_SANS_MONO=y
 # --- M3: agent orchestrator ---
 BR2_PACKAGE_TMUX=y
 BR2_PACKAGE_NEUROS_AGENTD=y
+# interactive login shell (serial console + ssh); system scripts stay on /bin/sh
+BR2_PACKAGE_FISH=y
+# v1 agent: Anthropic's Claude Code native CLI (baked from the build host)
+BR2_PACKAGE_CLAUDE_CODE=y
+# the Claude Code binary is a Bun single-file exe (JS bundle appended past the
+# ELF); stripping it drops the payload - leave it alone (path is target-relative,
+# no leading slash)
+BR2_STRIP_EXCLUDE_DIRS="opt/claude-code"
+BR2_STRIP_EXCLUDE_FILES="claude"
 
 # --- M4: audio (TTS + STT) ---
 BR2_PACKAGE_PIPER=y

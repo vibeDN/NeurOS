@@ -18,3 +18,48 @@ fi
 # NeurOS owns tty1 (compositor) - the text-console font/keymap setup only fails
 mkdir -p "$TARGET_DIR/etc/systemd/system"
 ln -sf /dev/null "$TARGET_DIR/etc/systemd/system/systemd-vconsole-setup.service"
+
+# fish as root's interactive login shell (serial console + ssh). System scripts
+# and the agent CLI keep their explicit /bin/sh shebangs.
+if [ -x "$TARGET_DIR/usr/bin/fish" ]; then
+	grep -q '^/usr/bin/fish$' "$TARGET_DIR/etc/shells" 2>/dev/null || \
+		echo /usr/bin/fish >> "$TARGET_DIR/etc/shells"
+	sed -i 's|^\(root:[^:]*:[^:]*:[^:]*:[^:]*:[^:]*:\).*|\1/usr/bin/fish|' \
+		"$TARGET_DIR/etc/passwd"
+fi
+
+# Claude Code auth (DEV ONLY): bake the build host's OAuth credentials so the
+# agent works out of the box. Secret - never committed; sourced straight from
+# $HOME. Skip cleanly if absent (CI / another machine).
+if [ -x "$TARGET_DIR/opt/claude-code/claude" ] && [ -f "$HOME/.claude/.credentials.json" ]; then
+	install -d -m 0700 "$TARGET_DIR/root/.claude"
+	install -m 0600 "$HOME/.claude/.credentials.json" "$TARGET_DIR/root/.claude/.credentials.json"
+	# minimal state so the CLI skips first-run onboarding
+	cat > "$TARGET_DIR/root/.claude.json" <<-'EOF'
+	{
+	  "hasCompletedOnboarding": true,
+	  "autoUpdates": false,
+	  "autoUpdatesProtectedForNative": true,
+	  "theme": "dark",
+	  "projects": {
+	    "/root": {
+	      "hasTrustDialogAccepted": true,
+	      "hasClaudeMdExternalIncludesApproved": true,
+	      "hasClaudeMdExternalIncludesWarningShown": true,
+	      "allowedTools": []
+	    }
+	  }
+	}
+	EOF
+	chmod 0600 "$TARGET_DIR/root/.claude.json"
+	# autonomous voice agent: minimise prompts. bypassPermissions / --dangerously-
+	# skip-permissions are refused as root, so use acceptEdits until the agent
+	# runs as a dedicated non-root user (TODO).
+	cat > "$TARGET_DIR/root/.claude/settings.json" <<-'EOF'
+	{
+	  "permissions": { "defaultMode": "acceptEdits" },
+	  "includeCoAuthoredBy": false
+	}
+	EOF
+	chmod 0600 "$TARGET_DIR/root/.claude/settings.json"
+fi
