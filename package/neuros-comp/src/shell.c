@@ -71,43 +71,71 @@ frame_place(struct ng_frame *f, const struct wlr_box *b, int t)
 	place(f->edge[3], b->x + b->width - t, b->y, t, b->height);       /* right */
 }
 
-/* -- big FIGlet text: outline .flf -> flood-filled -> solid colour blocks -- */
+/* -- big FIGlet text (rendered as mono via fcft, sized to the pane) ---- */
 
+/* Pick a big_font px size so the .flf art (flf_height rows) fills ~68% of a
+ * pane `pane_h` px tall - rendered near 1:1 so thin strokes stay crisp. */
+static void
+ng_shell_size_big_font(struct ng_shell *shell, int pane_h)
+{
+	int flf_h = shell->font ? shell->font->height : 6;
+	if (flf_h < 1)
+		flf_h = 6;
+	int sz = pane_h * 130 / 100 / flf_h; /* 2x supersample, downscaled by dest_size */
+	if (sz < 8)
+		sz = 8;
+	if (sz > 72)
+		sz = 72;
+	if (sz == shell->big_size && shell->big_font)
+		return;
+
+	if (shell->big_font)
+		fcft_destroy(shell->big_font);
+	char attr[32];
+	snprintf(attr, sizeof(attr), "size=%d", sz);
+	const char *names[] = {"monospace"};
+	shell->big_font = fcft_from_name(1, names, attr);
+	shell->big_size = shell->big_font ? sz : 0;
+}
+
+
+/* Render `text` through the .flf, draw the art with big_font, scale the buffer
+ * to ~82% of `box` and centre it. */
 static void
 bigtext_render(struct ng_shell *shell, struct wlr_scene_buffer *node, const char *text, const struct wlr_box *box)
 {
 	if (!node)
 		return;
-	if (!shell->font || !text || !text[0] || box->width < 8 || box->height < 8) {
+	if (!shell->font || !shell->big_font || !text || !text[0] || box->width < 8 || box->height < 8) {
 		wlr_scene_buffer_set_buffer(node, NULL);
 		return;
 	}
 
-	struct flf_render *r = flf_render_text(shell->font, text);
-	if (!r || r->cols < 1 || r->rows < 1) {
-		flf_render_free(r);
+	char *art = flf_render_string(shell->font, text);
+	if (!art) {
 		wlr_scene_buffer_set_buffer(node, NULL);
 		return;
 	}
-	flf_fill(r);
 
-	/* cell px: fit the grid into ~84% of the box */
-	int cw = box->width * 84 / 100 / r->cols;
-	int ch = box->height * 84 / 100 / r->rows;
-	int cell = cw < ch ? cw : ch;
-	if (cell < 1)
-		cell = 1;
-	if (cell > 48)
-		cell = 48;
-
-	struct wlr_buffer *buf = ng_grid_render(r->cell, r->cols, r->rows, cell, TEXT_COLOR);
-	int dw = r->cols * cell, dh = r->rows * cell;
-	flf_render_free(r);
-
-	if (!buf) {
+	int w = 0, h = 0;
+	struct wlr_buffer *buf = ng_text_render(shell->big_font, art, TEXT_COLOR, &w, &h);
+	free(art);
+	if (!buf || w < 1 || h < 1) {
 		wlr_scene_buffer_set_buffer(node, NULL);
 		return;
 	}
+
+	/* fit into 82% of the box, preserve aspect */
+	int fitw = box->width * 82 / 100;
+	int fith = box->height * 82 / 100;
+	double sx = (double) fitw / w, sy = (double) fith / h;
+	double s = sx < sy ? sx : sy;
+	int dw = (int) (w * s), dh = (int) (h * s);
+	if (dw < 1)
+		dw = 1;
+	if (dh < 1)
+		dh = 1;
+
 	wlr_scene_buffer_set_buffer(node, buf);
 	wlr_scene_buffer_set_dest_size(node, dw, dh);
 	wlr_buffer_drop(buf);
@@ -152,6 +180,8 @@ ng_shell_create(struct cg_server *server)
 	shell->strip_font = fcft_from_name(1, names, "size=13");
 	if (!shell->strip_font)
 		wlr_log(WLR_ERROR, "ng_shell: no monospace font (text disabled)");
+	shell->big_font = NULL; /* sized in ng_shell_layout to the pane height */
+	shell->big_size = 0;
 
 	shell->agent_node = wlr_scene_buffer_create(shell->tree, NULL);
 	shell->status_node = wlr_scene_buffer_create(shell->tree, NULL);
@@ -180,6 +210,8 @@ ng_shell_destroy(struct ng_shell *shell)
 	free(shell->activity_text);
 	if (shell->strip_font)
 		fcft_destroy(shell->strip_font);
+	if (shell->big_font)
+		fcft_destroy(shell->big_font);
 	if (shell->font)
 		flf_free(shell->font);
 	if (shell->tree)
@@ -365,6 +397,8 @@ ng_shell_layout(struct ng_shell *shell, int width, int height)
 	struct wlr_box status_box = shell->bottom_box;
 	status_box.height = status_box.height * 72 / 100;
 
+	int pane_h = shell->top_box.height < status_box.height ? shell->top_box.height : status_box.height;
+	ng_shell_size_big_font(shell, pane_h);
 
 	bigtext_render(shell, shell->agent_node, shell->agent_text, &shell->top_box);
 	bigtext_render(shell, shell->status_node, shell->status_text, &status_box);

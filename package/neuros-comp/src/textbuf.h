@@ -14,8 +14,4 @@ struct wlr_buffer;
 struct wlr_buffer *ng_text_render(struct fcft_font *font, const char *utf8, const float color[4], int *out_w,
 				  int *out_h);
 
-/* Render a `cols`x`rows` ink grid as solid `color` blocks, `cell` px each.
- * For the filled FIGlet block text. Returns a wlr_buffer or NULL. */
-struct wlr_buffer *ng_grid_render(const unsigned char *cells, int cols, int rows, int cell, const float color[4]);
-
 #endif
