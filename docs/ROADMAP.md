@@ -405,8 +405,10 @@ minimal Android property/HAL container (for camera). Packaged in this BR2_EXTERN
   (`wlr_session_lock_v1`). Input is now contained (keys swallowed while
   locked, OSK hidden, taps intercepted, scrim ~0.96) - the protocol itself
   is the remaining piece.
-- Camera **live feed** into the viewfinder (needs the phone camera HAL / a v4l2
-  frame grabber -> shared buffer the compositor reloads).
+- Camera **live feed**: compositor reload path done (batch 10) - `neuros-camera-feed`
+  -> `/run/neuros/camframe/frame.raw`, `camv_tick` timer swaps the scene buffer.
+  Phone side still needs a working `/dev/video0` (hybris HAL / v4l2 shim) for the
+  ffmpeg branch; dev VM runs the synthetic test pattern.
 - Live-mic capture link end to end (no mic in the headless VM - only the
   whisper+VAD half is verified).
 - OSK polish: long-press for accented/alt chars; a globe long-press layout
@@ -493,3 +495,15 @@ Piper TTS: ~20-65 MB/voice, ~50-150 MB RAM, faster than realtime.
   locked; `ng_shell_set_locked` hides the OSK. Pointer/touch already
   contained. Not the full `wlr_session_lock_v1` yet, but no input path to
   the client remains.
+
+## Resolved (2026-09-04, batch 10)
+
+- **OSK proportions** - keyboard height now derived from key size (~11 cols
+  wide, keys 6:5), was a flat 36% giving 2:1 portrait keys. ~36% -> ~26%.
+- **Camera live viewfinder** - `neuros-camera-feed` writes a raw ARGB frame
+  file; the compositor polls its mtime on a wl_event_loop timer (~15 Hz) and
+  swaps `camv_view_node`. ffmpeg/`/dev/video0` on the phone, synthetic
+  pulse in the VM. Placeholder hides on first frame; feed is pkilled on
+  `camera off`.
+- **Port targets noted** (user): Firefox (aarch64 Buildroot - large) and
+  Happ VPN from source -> see M7 / "Still open".
