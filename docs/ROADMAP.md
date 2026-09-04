@@ -258,14 +258,11 @@ minimal Android property/HAL container (for camera). Packaged in this BR2_EXTERN
 - Stand up an aarch64 Termux chroot on the phone for userspace smoke tests.
 
 ## Still open
-- **Big-font look.** User picked FIGlet **Standard** over `banner`. It now renders
-  correctly (`flf_render_string` + kerning/smushing + fcft mono, sized to the
-  pane, screenshots `output/m2-std*.png`) - but Standard is thin line-art, so at
-  display size it reads low-contrast on the gradient, not bold like
-  `docs/ui-mockup-v0.jpg`. Options: (a) a thicker/blockier `.flf` (e.g. `block`,
-  `colossal`, a custom one), (b) a bold TTF via fcft (drop FIGlet for the big
-  text), (c) accept thin Standard. Both `neuros-standard.flf` and
-  `neuros-banner.flf` are bundled; `NG_FONT_PATH` selects.
+- **Big-font look** - user is doing the real design in Claude Design; will send a
+  mockup. Current: thin FIGlet Standard via fcft (reverted the filled/`banner`
+  attempts - `flf_fill`/`flf_dilate`/`ng_grid_render` also reverted; Standard is
+  dense line-art and blobs when filled). `flf_render_string` + kerning/smushing
+  is solid and stays. Both `.flf` bundled; `NG_FONT_PATH` selects.
 - Lockscreen unlock gesture (PIN / any-key / pattern).
 - Camera pane + on-screen mic/camera button placement.
 - Pick the exact newest-stable HyperOS fastboot ROM build for sweet.
