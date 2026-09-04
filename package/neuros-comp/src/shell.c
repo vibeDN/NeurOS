@@ -26,7 +26,7 @@
 
 static const float FRAME_COLOR[4] = {0.04f, 0.04f, 0.04f, 1.0f};  /* border */
 static const float PANE_TINT[4] = {0.0f, 0.0f, 0.0f, 0.22f};      /* wash */
-static const float TEXT_COLOR[4] = {0.05f, 0.05f, 0.05f, 1.0f};
+static const float TEXT_COLOR[4] = {0.0f, 0.0f, 0.0f, 1.0f};
 static const float STRIP_COLOR[4] = {0.06f, 0.06f, 0.06f, 0.92f}; /* strip mono */
 
 /* default wallpaper = Claude accent -> darker shade */
@@ -81,7 +81,7 @@ ng_shell_size_big_font(struct ng_shell *shell, int pane_h)
 	int flf_h = shell->font ? shell->font->height : 6;
 	if (flf_h < 1)
 		flf_h = 6;
-	int sz = pane_h * 68 / 100 / flf_h;
+	int sz = pane_h * 130 / 100 / flf_h; /* 2x supersample, downscaled by dest_size */
 	if (sz < 8)
 		sz = 8;
 	if (sz > 72)
@@ -369,8 +369,8 @@ ng_shell_layout(struct ng_shell *shell, int width, int height)
 	int strip_h = height * 4 / 100;
 	if (strip_h < 22)
 		strip_h = 22;
-	int top_h = height * 15 / 100;
-	int bottom_h = height * 15 / 100;
+	int top_h = height * 19 / 100;
+	int bottom_h = height * 19 / 100;
 
 	int x = margin;
 	int w = width - 2 * margin;
