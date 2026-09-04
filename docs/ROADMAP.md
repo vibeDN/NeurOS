@@ -196,11 +196,13 @@ minimal Android property/HAL container (for camera). Packaged in this BR2_EXTERN
   -k` keeps the shell up with no client. Autostart: getty@tty1 -> profile.d ->
   `neuros-session` -> `neuros-comp -k -s -d -- foot`. **`ipc.c`** control socket
   + `neuros-ctl` - `agent`/`status`/`colors` verified driving the panes live.
-  **Top strip done**: `textbuf.c` (UTF-8 -> fcft -> pixman -> wlr_buffer ->
-  scene_buffer) renders the small mono line; `neuros-clock` pushes
-  HH:MM + date + battery every 20s via `neuros-ctl strip`.
-  Deferred to polish: "using <tool>" activity sub-line; right-align the battery;
-  lockscreen (`ext-session-lock-v1`); erofs + overlay-/etc layout on x86.
+  **Small mono text done** (`textbuf.c`: UTF-8 -> fcft -> pixman -> wlr_buffer):
+  top strip clock/date/battery (`neuros-clock` -> `neuros-ctl strip`) and the
+  bottom "using <tool>" activity sub-line (`neuros-ctl activity`, agentd maps
+  Bash/Edit/Read/Grep/Web -> a phrase, cleared on Idle). Verified in the VM -
+  the shell now matches the mockup on all zones.
+  Deferred: right-align the battery; nudge the activity line off the FIGlet
+  descenders; lockscreen (`ext-session-lock-v1`); erofs + overlay-/etc on x86.
 - [ ] **M2 - UI shell**: the static 4-zone shell (see "UI shell (v0)") - thin
   time/date/battery strip, top agent/model pane, center pane, bottom state pane;
   `.flf` parser + GLES glyph atlas for the FIGlet panes; embedded VT in the
