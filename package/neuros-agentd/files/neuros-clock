@@ -2,6 +2,13 @@
 # Push the top-strip line (time / date / battery) to the compositor every ~20s.
 set -u
 
+SOCK="${XDG_RUNTIME_DIR:-/run/user/0}/neuros-comp.sock"
+i=0
+while [ ! -S "$SOCK" ] && [ $i -lt 150 ]; do
+	sleep 0.2
+	i=$((i + 1))
+done
+
 battery() {
 	for d in /sys/class/power_supply/*/capacity; do
 		[ -r "$d" ] || continue
