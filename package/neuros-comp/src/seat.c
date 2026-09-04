@@ -105,6 +105,8 @@ osk_handle_press(struct cg_seat *seat, double lx, double ly)
 		if (ng_osk_press(server->osk, lx, ly)) {
 			seat->osk_grab = true;
 			view_position_all(server); /* the hide key may resize the client */
+			if (server->shell)
+				ng_shell_refresh(server->shell); /* keep the overlay buttons clear */
 			wlr_idle_notifier_v1_notify_activity(server->idle, seat->seat);
 			return true;
 		}
@@ -116,6 +118,8 @@ osk_handle_press(struct cg_seat *seat, double lx, double ly)
 	if (desktop_view_at(server, lx, ly, &surface, &sx, &sy)) {
 		ng_osk_set_visible(server->osk, true);
 		view_position_all(server);
+		if (server->shell)
+			ng_shell_refresh(server->shell);
 		wlr_idle_notifier_v1_notify_activity(server->idle, seat->seat);
 	}
 	return false;
@@ -131,6 +135,8 @@ osk_handle_release(struct cg_seat *seat)
 	if (seat->server->osk) {
 		ng_osk_release(seat->server->osk);
 		view_position_all(seat->server);
+		if (seat->server->shell)
+			ng_shell_refresh(seat->server->shell);
 	}
 	return true;
 }

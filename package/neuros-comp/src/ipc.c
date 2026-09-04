@@ -127,6 +127,8 @@ handle_line(struct ng_ipc *ipc, char *line)
 			else
 				ng_osk_set_visible(osk, arg && strcmp(arg, "on") == 0);
 			view_position_all(ipc->server);
+			if (ipc->server->shell)
+				ng_shell_refresh(ipc->server->shell);
 		}
 	} else if (strcmp(line, "colors") == 0 && arg) {
 		char *sp = strchr(arg, ' ');

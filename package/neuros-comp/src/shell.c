@@ -24,6 +24,7 @@
 #include <wlr/util/log.h>
 
 #include "figlet.h"
+#include "osk.h"
 #include "server.h"
 #include "shell.h"
 #include "textbuf.h"
@@ -838,6 +839,13 @@ ng_shell_camera_tap(struct ng_shell *shell, double lx, double ly)
 }
 
 void
+ng_shell_refresh(struct ng_shell *shell)
+{
+	if (shell && shell->width >= 16 && shell->height >= 16)
+		ng_shell_layout(shell, shell->width, shell->height);
+}
+
+void
 ng_shell_layout(struct ng_shell *shell, int width, int height)
 {
 	if (width < 16 || height < 16)
@@ -952,6 +960,13 @@ ng_shell_layout(struct ng_shell *shell, int width, int height)
 	int bgap = bd / 3;
 	int inset = shell->panel_rad * 3 / 4; /* match view.c client inset */
 	int by = shell->center_box.y + shell->center_box.height - inset - bpad - bd;
+	/* when the on-screen keyboard is up, lift the buttons clear of it so they
+	 * stay reachable (they'd otherwise sit under the top key row) */
+	if (shell->server && shell->server->osk && ng_osk_is_visible(shell->server->osk)) {
+		int kb_top = ng_osk_top(shell->server->osk);
+		if (kb_top > 0 && by + bd > kb_top - bgap)
+			by = kb_top - bgap - bd;
+	}
 	int mic_x = shell->center_box.x + shell->center_box.width - inset - bpad - bd;
 	int cam_x = mic_x - bgap - bd;
 	shell->cam_box = (struct wlr_box){cam_x, by, bd, bd};

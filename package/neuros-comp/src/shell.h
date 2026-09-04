@@ -117,6 +117,8 @@ struct ng_shell *ng_shell_create(struct cg_server *server);
 void ng_shell_destroy(struct ng_shell *shell);
 
 void ng_shell_layout(struct ng_shell *shell, int width, int height);
+/* re-run the layout at the current size (e.g. after the OSK shows / hides). */
+void ng_shell_refresh(struct ng_shell *shell);
 void ng_shell_set_colors(struct ng_shell *shell, const float top[4], const float bottom[4]);
 
 /* Big Doto text in the top / bottom panes. */
