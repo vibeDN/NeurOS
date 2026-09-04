@@ -418,6 +418,14 @@ handle_key_event(struct wlr_keyboard *keyboard, struct cg_seat *seat, void *data
 		return;
 	}
 
+	/* Locked: swallow every key - nothing reaches the client. The passcode
+	 * keypad is tap-only, and the power menu is driven by the side keys
+	 * (handled above). This is the input half of the lock boundary. */
+	if (seat->server->shell && ng_shell_is_locked(seat->server->shell)) {
+		wlr_idle_notifier_v1_notify_activity(seat->server->idle, seat->seat);
+		return;
+	}
+
 	/* Translate from libinput keycode to an xkbcommon keycode. */
 	xkb_keycode_t keycode = event->keycode + 8;
 

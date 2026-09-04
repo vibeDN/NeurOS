@@ -699,6 +699,9 @@ ng_shell_set_locked(struct ng_shell *shell, int locked, const char *time, const 
 		shell->lock_mode = 0;
 		shell->lock_pin_len = 0;
 		shell->lock_wrong = 0;
+		/* the on-screen keyboard must not be reachable behind the lock */
+		if (shell->server && shell->server->osk)
+			ng_osk_set_visible(shell->server->osk, false);
 		lock_layout(shell);
 		wlr_scene_node_raise_to_top(&shell->lock->node);
 	}
