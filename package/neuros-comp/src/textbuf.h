@@ -42,4 +42,8 @@ struct wlr_buffer *ng_dot_render(int d, const float color[4], int ring, const fl
  * RGBA). Buffer is premultiplied ARGB, d x d. */
 struct wlr_buffer *ng_button_render(int d, int icon, const float bg[4], const float ring[4], const float fg[4]);
 
+/* Wrap a heap `data` array (w*h premultiplied ARGB8888, stride w*4) in a
+ * wlr_buffer. Takes ownership of `data` (freed with the buffer). NULL on OOM. */
+struct wlr_buffer *ng_argb_buffer(unsigned int *data, int w, int h);
+
 #endif

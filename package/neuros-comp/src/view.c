@@ -20,6 +20,7 @@
 #include "seat.h"
 #include "server.h"
 #include "shell.h"
+#include "osk.h"
 #include "view.h"
 #if CAGE_HAS_XWAYLAND
 #include "xwayland.h"
@@ -88,6 +89,13 @@ view_position(struct cg_view *view)
 				.height = shell->center_box.height - 2 * t,
 			};
 		}
+	}
+
+	/* keep the client above the on-screen keyboard when it's up */
+	if (view->server->osk && ng_osk_is_visible(view->server->osk)) {
+		int kb_top = ng_osk_top(view->server->osk);
+		if (kb_top > target.y && kb_top < target.y + target.height)
+			target.height = kb_top - target.y;
 	}
 
 	view_maximize(view, &target);

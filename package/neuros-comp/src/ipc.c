@@ -14,8 +14,10 @@
 #include <wlr/util/log.h>
 
 #include "ipc.h"
+#include "osk.h"
 #include "server.h"
 #include "shell.h"
+#include "view.h"
 
 #define NG_IPC_SOCK "neuros-comp.sock"
 #define NG_IPC_MAXLINE 512
@@ -86,6 +88,19 @@ handle_line(struct ng_ipc *ipc, char *line)
 		ng_shell_set_locked(shell, 1, (arg && arg[0]) ? arg : NULL, bar);
 	} else if (strcmp(line, "unlock") == 0) {
 		ng_shell_set_locked(shell, 0, NULL, NULL);
+	} else if (strcmp(line, "kbd") == 0) {
+		struct ng_osk *osk = ipc->server->osk;
+		if (osk && arg && strncmp(arg, "tap ", 4) == 0) {
+			double x = 0, y = 0;
+			if (sscanf(arg + 4, "%lf %lf", &x, &y) == 2)
+				ng_osk_tap(osk, x, y);
+		} else if (osk) {
+			if (arg && strcmp(arg, "toggle") == 0)
+				ng_osk_set_visible(osk, !ng_osk_is_visible(osk));
+			else
+				ng_osk_set_visible(osk, arg && strcmp(arg, "on") == 0);
+			view_position_all(ipc->server);
+		}
 	} else if (strcmp(line, "colors") == 0 && arg) {
 		char *sp = strchr(arg, ' ');
 		float top[4], bot[4];

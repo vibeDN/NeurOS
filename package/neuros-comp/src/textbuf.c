@@ -233,6 +233,16 @@ buf_from_data(uint32_t *data, int w, int h)
 	return &t->base;
 }
 
+struct wlr_buffer *
+ng_argb_buffer(unsigned int *data, int w, int h)
+{
+	if (!data || w < 1 || h < 1) {
+		free(data);
+		return NULL;
+	}
+	return buf_from_data((uint32_t *) data, w, h);
+}
+
 /* coverage 0..1 of pixel (px,py) inside a rounded rect [0,w]x[0,h] radius r,
  * with a 1px antialiased edge */
 static float

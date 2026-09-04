@@ -25,6 +25,8 @@ struct cg_seat {
 	struct wl_list touch;
 	struct wl_listener new_input;
 
+	struct wlr_keyboard *osk_keyboard; /* synthetic kb behind the on-screen keyboard */
+
 	struct wlr_cursor *cursor;
 	struct wlr_xcursor_manager *xcursor_manager;
 	struct wl_listener cursor_motion_relative;
@@ -92,5 +94,9 @@ void seat_destroy(struct cg_seat *seat);
 struct cg_view *seat_get_focus(struct cg_seat *seat);
 void seat_set_focus(struct cg_seat *seat, struct cg_view *view);
 void seat_center_cursor(struct cg_seat *seat);
+
+/* Register the on-screen keyboard's synthetic device: advertises keyboard
+ * capability and makes it the active seat keyboard so clients get a keymap. */
+void seat_set_osk_keyboard(struct cg_seat *seat, struct wlr_keyboard *keyboard);
 
 #endif

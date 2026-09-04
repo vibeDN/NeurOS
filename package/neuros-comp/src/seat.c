@@ -39,6 +39,7 @@
 #include "seat.h"
 #include "server.h"
 #include "shell.h"
+#include "osk.h"
 #include "view.h"
 #if CAGE_HAS_XWAYLAND
 #include "xwayland.h"
@@ -88,6 +89,35 @@ desktop_view_at(struct cg_server *server, double lx, double ly, struct wlr_surfa
 	return node->data;
 }
 
+/* On-screen keyboard: a tap on the keyboard is consumed; a tap on the client
+ * surface while the keyboard is hidden raises it (and is still forwarded, so the
+ * terminal places its cursor). Returns true only when the tap was consumed. */
+static bool
+osk_handle_press(struct cg_seat *seat, double lx, double ly)
+{
+	struct cg_server *server = seat->server;
+	if (!server->osk)
+		return false;
+
+	if (ng_osk_is_visible(server->osk)) {
+		if (ng_osk_tap(server->osk, lx, ly)) {
+			view_position_all(server); /* the hide key may have resized the client */
+			wlr_idle_notifier_v1_notify_activity(server->idle, seat->seat);
+			return true;
+		}
+		return false;
+	}
+
+	double sx, sy;
+	struct wlr_surface *surface;
+	if (desktop_view_at(server, lx, ly, &surface, &sx, &sy)) {
+		ng_osk_set_visible(server->osk, true);
+		view_position_all(server);
+		wlr_idle_notifier_v1_notify_activity(server->idle, seat->seat);
+	}
+	return false;
+}
+
 static void
 press_cursor_button(struct cg_seat *seat, struct wlr_input_device *device, uint32_t time, uint32_t button,
 		    uint32_t state, double lx, double ly)
@@ -116,7 +146,7 @@ update_capabilities(struct cg_seat *seat)
 {
 	uint32_t caps = 0;
 
-	if (!wl_list_empty(&seat->keyboard_groups)) {
+	if (!wl_list_empty(&seat->keyboard_groups) || seat->osk_keyboard) {
 		caps |= WL_SEAT_CAPABILITY_KEYBOARD;
 	}
 	if (!wl_list_empty(&seat->pointers)) {
@@ -520,6 +550,8 @@ handle_touch_down(struct wl_listener *listener, void *data)
 			wlr_idle_notifier_v1_notify_activity(seat->server->idle, seat->seat);
 			return;
 		}
+		if (osk_handle_press(seat, lx, ly))
+			return;
 	}
 
 	double sx, sy;
@@ -640,6 +672,8 @@ handle_cursor_button(struct wl_listener *listener, void *data)
 			wlr_idle_notifier_v1_notify_activity(seat->server->idle, seat->seat);
 			return;
 		}
+		if (osk_handle_press(seat, seat->cursor->x, seat->cursor->y))
+			return;
 	}
 
 	wlr_seat_pointer_notify_button(seat->seat, event->time_msec, event->button, event->state);
@@ -1011,4 +1045,19 @@ seat_center_cursor(struct cg_seat *seat)
 	struct wlr_box layout_box;
 	wlr_output_layout_get_box(seat->server->output_layout, NULL, &layout_box);
 	wlr_cursor_warp(seat->cursor, NULL, layout_box.width / 2, layout_box.height / 2);
+}
+
+void
+seat_set_osk_keyboard(struct cg_seat *seat, struct wlr_keyboard *keyboard)
+{
+	seat->osk_keyboard = keyboard;
+	update_capabilities(seat);
+	wlr_seat_set_keyboard(seat->seat, keyboard);
+
+	/* re-arm keyboard focus so an already-mapped client gets the keymap */
+	struct cg_view *view = seat_get_focus(seat);
+	if (view && view->wlr_surface) {
+		wlr_seat_keyboard_notify_enter(seat->seat, view->wlr_surface, keyboard->keycodes,
+					       keyboard->num_keycodes, &keyboard->modifiers);
+	}
 }

@@ -57,6 +57,7 @@
 #include "seat.h"
 #include "server.h"
 #include "shell.h"
+#include "osk.h"
 #include "view.h"
 #include "xdg_shell.h"
 #if CAGE_HAS_XWAYLAND
@@ -420,6 +421,8 @@ main(int argc, char *argv[])
 		goto end;
 	}
 
+	server.osk = ng_osk_create(&server); /* on-screen keyboard; non-fatal */
+
 	server.idle = wlr_idle_notifier_v1_create(server.wl_display);
 	if (!server.idle) {
 		wlr_log(WLR_ERROR, "Unable to create the idle tracker");
@@ -649,6 +652,7 @@ end:
 	}
 	seat_destroy(server.seat);
 	ng_ipc_destroy(server.ipc);
+	ng_osk_destroy(server.osk);
 	ng_shell_destroy(server.shell);
 	/* This function is not null-safe, but we only ever get here
 	   with a proper wl_display. */

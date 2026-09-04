@@ -39,6 +39,7 @@
 #include "seat.h"
 #include "server.h"
 #include "shell.h"
+#include "osk.h"
 #include "view.h"
 #if CAGE_HAS_XWAYLAND
 #include "xwayland.h"
@@ -186,6 +187,8 @@ handle_output_layout_change(struct wl_listener *listener, void *data)
 		wlr_output_layout_get_box(server->output_layout, NULL, &box);
 		if (!wlr_box_empty(&box)) {
 			ng_shell_layout(server->shell, box.width, box.height);
+			if (server->osk)
+				ng_osk_layout(server->osk, box.width, box.height);
 		}
 	}
 
