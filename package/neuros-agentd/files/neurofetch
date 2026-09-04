@@ -1,0 +1,20 @@
+#!/bin/sh
+# NeurOS shell greeting: fastfetch with a per-agent logo + accent colour.
+[ -r /etc/neuros/agentd.conf ] && . /etc/neuros/agentd.conf
+agent=$(printf '%s' "${AGENT_NAME:-neuros}" | tr 'A-Z' 'a-z')
+
+logo="/usr/share/neuros/logos/$agent.txt"
+[ -f "$logo" ] || logo="/usr/share/neuros/logos/robot.txt"
+
+case "$agent" in
+claude)   col="38;2;217;119;87"  ;;  # #D97757
+chatgpt)  col="38;2;171;104;255" ;;  # #AB68FF
+gemini)   col="38;2;66;133;244"  ;;  # #4285F4
+deepseek) col="38;2;77;107;254"  ;;  # #4D6BFE
+qwen)     col="38;2;123;97;255"  ;;  # #7B61FF
+kimi)     col="38;2;150;150;150" ;;
+*)        col="38;2;217;119;87"  ;;
+esac
+
+exec fastfetch --config /etc/fastfetch/config.jsonc \
+	--logo "$logo" --logo-color-1 "$col" --logo-type file "$@"

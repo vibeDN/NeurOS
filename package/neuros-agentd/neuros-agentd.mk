@@ -21,6 +21,9 @@ define NEUROS_AGENTD_INSTALL_TARGET_CMDS
 	$(INSTALL) -D -m 0755 $(@D)/neuros-lock $(TARGET_DIR)/usr/bin/neuros-lock
 	$(INSTALL) -D -m 0755 $(@D)/neuros-agent-hook $(TARGET_DIR)/usr/lib/neuros/neuros-agent-hook
 	$(INSTALL) -D -m 0644 $(@D)/agentd.conf $(TARGET_DIR)/etc/neuros/agentd.conf
+	$(INSTALL) -D -m 0755 $(@D)/neurofetch $(TARGET_DIR)/usr/bin/neurofetch
+	$(INSTALL) -D -m 0644 $(@D)/fastfetch.jsonc $(TARGET_DIR)/etc/fastfetch/config.jsonc
+	$(INSTALL) -D -m 0644 $(@D)/logos/robot.txt $(TARGET_DIR)/usr/share/neuros/logos/robot.txt
 endef
 
 $(eval $(generic-package))

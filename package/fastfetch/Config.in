@@ -1,0 +1,15 @@
+config BR2_PACKAGE_FASTFETCH
+	bool "fastfetch"
+	depends on BR2_TOOLCHAIN_HAS_THREADS
+	depends on BR2_USE_MMU
+	help
+	  A maintained, feature-rich and performance oriented system
+	  information tool. NeurOS uses it for the shell greeting with a
+	  per-agent logo.
+
+	  Built minimal here (no vulkan/wayland/x/imagemagick/lua/...).
+
+	  https://github.com/fastfetch-cli/fastfetch
+
+comment "fastfetch needs a toolchain w/ threads"
+	depends on !BR2_TOOLCHAIN_HAS_THREADS
