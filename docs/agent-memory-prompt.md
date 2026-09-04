@@ -55,6 +55,22 @@ write it immediately in that turn.
   fragment one subject across three files.
 - Update existing files instead of creating near-duplicates.
 
+## Device tools
+
+You are running on a NeurOS phone. Beyond your normal shell, these commands
+drive the hardware and UI (all safe to call):
+
+- `neuros-camera on|off|shot` — open/close the viewfinder the user sees; `shot`
+  saves a still to `~/pictures`.
+- `neuros-mic on|off` — toggle the always-listening mic (speech is transcribed
+  and typed into your prompt).
+- `neuros-web <cmd>` — a browser (cog / WPE WebKit) that **you and the user
+  share**: the same window is on screen for them to touch. `start`, then
+  `open <url>`, `text` (read the page), `links`, `click <text>`, `type <css>
+  <text>`, `key Enter`, `eval <js>`, `shot` (PNG you can read), `url`, `stop`.
+  Prefer `text`/`links` to understand a page before acting.
+- `neuros-lock lock` / `neuros-tts toggle` / `neuros-vol up|down`.
+
 ---
 
 ## Implementation notes (not part of the injected prompt)

@@ -1,0 +1,165 @@
+#!/bin/sh
+# neuros-web - drive the shared browser (WPE WebKit via cog) from the shell or
+# the agent. Talks W3C WebDriver over HTTP to a local WebKitWebDriver, which
+# launches / owns one cog window that the user also sees and can touch.
+#
+#   neuros-web start                 bring up the driver + a cog window
+#   neuros-web open <url>            navigate the current tab
+#   neuros-web text                  print document.body.innerText (what to read)
+#   neuros-web links                 list visible links as "text\thref"
+#   neuros-web click <text>          click the first element whose text matches
+#   neuros-web type <css> <text>     focus a field and type into it
+#   neuros-web key <Enter|Tab|...>   press a single key
+#   neuros-web eval <js>             run JS, print the JSON result
+#   neuros-web shot [path]           screenshot -> PNG (default /run/neuros/web/shot.png)
+#   neuros-web url                   print the current URL
+#   neuros-web stop                  close the window + driver
+set -u
+
+HOST=127.0.0.1
+PORT="${NEUROS_WEBDRIVER_PORT:-9515}"
+BASE="http://$HOST:$PORT"
+RT=/run/neuros/web
+SES="$RT/session"
+DRVPID="$RT/driver.pid"
+COG_BIN="${NEUROS_WEB_BROWSER:-/usr/bin/cog}"
+mkdir -p "$RT" 2>/dev/null || true
+
+die() { echo "neuros-web: $*" >&2; exit 1; }
+j()   { jq -r "$1" 2>/dev/null; }
+
+api() { # api METHOD PATH [JSON]
+	m=$1; p=$2; d=${3:-}
+	if [ -n "$d" ]; then
+		curl -s -X "$m" -H 'Content-Type: application/json' -d "$d" "$BASE$p"
+	else
+		curl -s -X "$m" "$BASE$p"
+	fi
+}
+
+sid() { [ -r "$SES" ] && cat "$SES" || die "no session - run: neuros-web start"; }
+
+ensure_driver() {
+	if curl -s -o /dev/null -m 1 "$BASE/status"; then return 0; fi
+	echo "neuros-web: starting WebKitWebDriver on $PORT" >&2
+	WEBKIT_EXEC_PATH= setsid WebKitWebDriver --host="$HOST" --port="$PORT" \
+		>"$RT/driver.log" 2>&1 &
+	echo $! > "$DRVPID"
+	i=0
+	while [ $i -lt 50 ]; do
+		curl -s -o /dev/null -m 1 "$BASE/status" && return 0
+		sleep 0.2; i=$((i + 1))
+	done
+	die "WebKitWebDriver did not come up (see $RT/driver.log)"
+}
+
+cmd_start() {
+	ensure_driver
+	if [ -r "$SES" ] && api GET "/session/$(cat "$SES")/url" | grep -q '"value"'; then
+		echo "already running: $(cat "$SES")"; return 0
+	fi
+	caps=$(cat <<EOF
+{"capabilities":{"alwaysMatch":{
+  "browserName":"cog",
+  "wpe:browserOptions":{"binary":"$COG_BIN","args":["--platform=wayland","--automated"]}
+}}}
+EOF
+)
+	resp=$(api POST "/session" "$caps")
+	s=$(printf '%s' "$resp" | j '.value.sessionId // .sessionId // empty')
+	[ -n "$s" ] || die "session create failed: $resp"
+	printf '%s' "$s" > "$SES"
+	echo "session $s"
+}
+
+cmd_stop() {
+	[ -r "$SES" ] && api DELETE "/session/$(cat "$SES")" >/dev/null 2>&1
+	rm -f "$SES"
+	[ -r "$DRVPID" ] && kill "$(cat "$DRVPID")" 2>/dev/null
+	rm -f "$DRVPID"
+	echo "stopped"
+}
+
+cmd_open() {
+	[ $# -ge 1 ] || die "usage: neuros-web open <url>"
+	u=$1
+	case "$u" in http://*|https://*|about:*|file:*) ;; *) u="https://$u" ;; esac
+	api POST "/session/$(sid)/url" "{\"url\":$(printf '%s' "$u" | jq -Rs .)}" \
+		| j '.value // "ok"'
+}
+
+cmd_url() { api GET "/session/$(sid)/url" | j '.value'; }
+
+# run JS in the page, print .value as raw
+run_js() { # run_js "<script body>" ["json-args-array"]
+	body=$1; args=${2:-[]}
+	payload=$(jq -n --arg s "$body" --argjson a "$args" '{script:$s,args:$a}')
+	api POST "/session/$(sid)/execute/sync" "$payload"
+}
+
+cmd_text()  { run_js 'return document.body ? document.body.innerText : ""' | j '.value'; }
+
+cmd_links() {
+	run_js 'return [...document.querySelectorAll("a[href]")].filter(a=>a.offsetParent).map(a=>a.innerText.trim()+"\t"+a.href)' \
+		| j '.value[]?'
+}
+
+cmd_click() {
+	[ $# -ge 1 ] || die "usage: neuros-web click <text>"
+	run_js 'const t=arguments[0].toLowerCase();
+	  const el=[...document.querySelectorAll("a,button,input[type=submit],[role=button],[onclick]")]
+	    .find(e=>(e.innerText||e.value||"").trim().toLowerCase().includes(t));
+	  if(!el) return "not found: "+t;
+	  el.scrollIntoView({block:"center"}); el.click(); return "clicked: "+(el.innerText||el.value||el.tagName)' \
+		"$(jq -n --arg x "$1" '[$x]')" | j '.value'
+}
+
+cmd_type() {
+	[ $# -ge 2 ] || die "usage: neuros-web type <css> <text>"
+	run_js 'const el=document.querySelector(arguments[0]); if(!el) return "no match: "+arguments[0];
+	  el.focus(); el.value=arguments[1];
+	  el.dispatchEvent(new Event("input",{bubbles:true}));
+	  el.dispatchEvent(new Event("change",{bubbles:true})); return "typed"' \
+		"$(jq -n --arg s "$1" --arg v "$2" '[$s,$v]')" | j '.value'
+}
+
+cmd_key() {
+	[ $# -ge 1 ] || die "usage: neuros-web key <name>"
+	# W3C key actions
+	case "$1" in
+	Enter|enter)  u='' ;;
+	Tab|tab)      u='' ;;
+	Escape|esc)   u='' ;;
+	Backspace)    u='' ;;
+	*)            u="$1" ;;
+	esac
+	api POST "/session/$(sid)/actions" \
+		"{\"actions\":[{\"type\":\"key\",\"id\":\"kb\",\"actions\":[{\"type\":\"keyDown\",\"value\":\"$u\"},{\"type\":\"keyUp\",\"value\":\"$u\"}]}]}" \
+		| j '.value // "ok"'
+}
+
+cmd_eval() {
+	[ $# -ge 1 ] || die "usage: neuros-web eval <js>"
+	run_js "return ($1)" | j '.value'
+}
+
+cmd_shot() {
+	out="${1:-$RT/shot.png}"
+	api GET "/session/$(sid)/screenshot" | j '.value' | base64 -d > "$out" 2>/dev/null \
+		&& echo "$out" || die "screenshot failed"
+}
+
+case "${1:-}" in
+start)  shift; cmd_start "$@" ;;
+stop)   cmd_stop ;;
+open)   shift; cmd_open "$@" ;;
+url)    cmd_url ;;
+text)   cmd_text ;;
+links)  cmd_links ;;
+click)  shift; cmd_click "$@" ;;
+type)   shift; cmd_type "$@" ;;
+key)    shift; cmd_key "$@" ;;
+eval)   shift; cmd_eval "$@" ;;
+shot)   shift; cmd_shot "$@" ;;
+*) grep '^#' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
+esac

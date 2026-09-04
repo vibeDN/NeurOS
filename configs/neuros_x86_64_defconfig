@@ -98,6 +98,19 @@ BR2_PACKAGE_CLAUDE_CODE=y
 BR2_STRIP_EXCLUDE_DIRS="opt/claude-code"
 BR2_STRIP_EXCLUDE_FILES="claude"
 
+# --- browser: WPE WebKit + cog (human + agent share one live view) ---
+# cog = chromeless single-window WPE launcher, runs as a Wayland client of the
+# NeurOS compositor. WebKitWebDriver (W3C) + the WebKit remote inspector give
+# the agent DOM / click / type / screenshot on the SAME instance the user sees.
+# multimedia (gstreamer) + sandbox deferred - v1 has no <video>/<audio>.
+BR2_PACKAGE_WPEWEBKIT=y
+BR2_PACKAGE_WPEWEBKIT_WEBDRIVER=y
+BR2_PACKAGE_COG=y
+BR2_PACKAGE_COG_PROGRAMS_HOME_URI=""
+# neuros-web talks W3C WebDriver over HTTP (needs real verbs: POST/GET/DELETE)
+BR2_PACKAGE_LIBCURL=y
+BR2_PACKAGE_LIBCURL_CURL=y
+
 # --- M4: audio (TTS + STT) ---
 BR2_PACKAGE_PIPER=y
 BR2_PACKAGE_PIPER_VOICES=y
