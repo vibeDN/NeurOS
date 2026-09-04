@@ -72,18 +72,23 @@ struct ng_shell {
 	struct wlr_box center_box;
 	struct wlr_box bottom_box;
 
-	/* lockscreen (compositor-drawn overlay; tap the lock to unlock, no PIN) */
+	/* lockscreen (compositor-drawn overlay). clock view -> tap -> 6-digit PIN. */
 	struct wlr_scene_tree *lock;
 	struct wlr_scene_rect *lock_dim;
 	struct wlr_scene_buffer *lock_time_node;
 	struct wlr_scene_buffer *lock_date_node;
-	struct wlr_scene_buffer *lock_mic_node;
-	struct wlr_scene_buffer *lock_lock_node;
-	struct wlr_scene_buffer *lock_cam_node;
-	struct wlr_scene_buffer *lock_hint_node;
-	struct wlr_box lock_mic_box, lock_lock_box, lock_cam_box;
+	struct wlr_scene_buffer *lock_hint_node;    /* "swipe up" / "Enter Passcode" */
+	struct wlr_scene_buffer *lock_dots_node;    /* 6 pin dots */
+	struct wlr_scene_buffer *lock_cancel_node;
+	struct wlr_scene_buffer *lock_key_node[12]; /* 1..9, _, 0, del */
+	struct wlr_box lock_key_box[12], lock_cancel_box;
 	char *lock_time_text;
 	char *lock_date_text;
+	char *lock_expected; /* the passcode read from /etc/neuros/passcode */
+	char lock_pin[8];
+	int lock_pin_len;
+	int lock_mode;  /* 0 = clock, 1 = passcode entry */
+	int lock_wrong; /* set briefly after a bad code */
 	int locked;
 
 	/* camera mode - full-panel viewfinder over the centre pane */

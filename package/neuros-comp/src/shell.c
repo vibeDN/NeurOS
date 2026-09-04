@@ -13,6 +13,7 @@
 #define _POSIX_C_SOURCE 200809L
 
 #include <signal.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/wait.h>
@@ -29,7 +30,7 @@
 
 /* big display text = FIGlet "slant" (Glenn Chappell), rasterised as ASCII art
  * in a mono face and scaled to the pane */
-#define NG_FIG_PATH  "/usr/share/neuros/fonts/neuros-slant.flf"
+#define NG_FIG_PATH  "/usr/share/neuros/fonts/neuros-big.flf"
 #define NG_FIG_FONT  "JetBrains Mono:weight=bold:size=18"
 #define NG_MONO_FONT "JetBrains Mono"
 
@@ -179,7 +180,7 @@ static void
 bigtext_render(struct ng_shell *shell, struct wlr_scene_buffer *node, const char *text, const struct wlr_box *box,
 	       int cy)
 {
-	figtext_render(shell, node, text, box, cy, 93);
+	figtext_render(shell, node, text, box, cy, 90);
 }
 
 /* -- small mono text (strip / model / activity) ------------------------ */
@@ -271,10 +272,11 @@ ng_shell_create(struct cg_server *server)
 		shell->lock_dim = wlr_scene_rect_create(shell->lock, 1, 1, scrim);
 		shell->lock_time_node = wlr_scene_buffer_create(shell->lock, NULL);
 		shell->lock_date_node = wlr_scene_buffer_create(shell->lock, NULL);
-		shell->lock_mic_node = wlr_scene_buffer_create(shell->lock, NULL);
-		shell->lock_lock_node = wlr_scene_buffer_create(shell->lock, NULL);
-		shell->lock_cam_node = wlr_scene_buffer_create(shell->lock, NULL);
 		shell->lock_hint_node = wlr_scene_buffer_create(shell->lock, NULL);
+		shell->lock_dots_node = wlr_scene_buffer_create(shell->lock, NULL);
+		shell->lock_cancel_node = wlr_scene_buffer_create(shell->lock, NULL);
+		for (int i = 0; i < 12; i++)
+			shell->lock_key_node[i] = wlr_scene_buffer_create(shell->lock, NULL);
 		wlr_scene_node_set_enabled(&shell->lock->node, false);
 	}
 
@@ -299,6 +301,7 @@ ng_shell_destroy(struct ng_shell *shell)
 	free(shell->strip_right_text);
 	free(shell->activity_text);
 	free(shell->lock_time_text);
+	free(shell->lock_expected);
 	free(shell->lock_date_text);
 	if (shell->strip_font)
 		fcft_destroy(shell->strip_font);
@@ -462,32 +465,19 @@ ng_shell_press_button(struct ng_shell *shell, int which)
 	}
 }
 
-/* -- lockscreen ------------------------------------------------------- */
+/* -- lockscreen (clock view -> 6-digit passcode) --------------------- */
+
+static const char *LOCK_KEYS[12] = {"1", "2", "3", "4", "5", "6", "7", "8", "9", "", "0", "del"};
 
 static void
-lock_layout(struct ng_shell *shell)
+lock_split_clock(struct ng_shell *shell, const char **tm, const char **dt)
 {
-	if (!shell->lock || shell->width < 16 || shell->height < 16)
-		return;
-	int W = shell->width, H = shell->height;
-
-	/* scrim: near-opaque, tinted to a dark shade of the agent's own gradient
-	 * (premultiplied colour) so it reads on-brand and fully hides the shell */
-	float sa = 0.965f;
-	float scrim[4] = {shell->bottom_color[0] * 0.55f * sa, shell->bottom_color[1] * 0.55f * sa,
-			  shell->bottom_color[2] * 0.55f * sa, sa};
-	wlr_scene_rect_set_color(shell->lock_dim, scrim);
-	place(shell->lock_dim, 0, 0, W, H);
-
-	/* big time, centred a bit above the middle */
-	const char *tm = shell->lock_time_text;
-	const char *dt = shell->lock_date_text;
-	if ((!tm || !tm[0]) && shell->strip_text && shell->strip_text[0]) {
-		/* fall back to the strip clock "HH:MM     Day DD Mon" */
+	*tm = shell->lock_time_text;
+	*dt = shell->lock_date_text;
+	if ((!*tm || !(*tm)[0]) && shell->strip_text && shell->strip_text[0]) {
 		static char tbuf[16], dbuf[64];
-		int n = sscanf(shell->strip_text, "%15s", tbuf);
-		if (n == 1) {
-			tm = tbuf;
+		if (sscanf(shell->strip_text, "%15s", tbuf) == 1) {
+			*tm = tbuf;
 			const char *rest = strstr(shell->strip_text, tbuf);
 			if (rest) {
 				rest += strlen(tbuf);
@@ -495,52 +485,117 @@ lock_layout(struct ng_shell *shell)
 					rest++;
 				snprintf(dbuf, sizeof(dbuf), "%s", rest);
 				if (dbuf[0])
-					dt = dbuf;
+					*dt = dbuf;
 			}
 		}
 	}
+}
 
-	int cx = W / 2, cy = H * 34 / 100;
-	int tsz = H / 9;
-	struct wlr_box tbox = {W / 10, cy - tsz / 2, W * 8 / 10, tsz};
-	figtext_render(shell, shell->lock_time_node, tm, &tbox, cy, 100);
+static void
+lock_layout(struct ng_shell *shell)
+{
+	if (!shell->lock || shell->width < 16 || shell->height < 16)
+		return;
+	int W = shell->width, H = shell->height, cx = W / 2;
 
-	if (shell->strip_font && dt && dt[0]) {
-		struct wlr_buffer *b = ng_text_render(shell->strip_font, dt, DIM_COLOR, NULL, NULL);
-		if (b) {
-			int dw = b->width;
-			node_set(shell->lock_date_node, b, cx - dw / 2, cy + tsz / 2 + H / 30);
+	float sa = 0.965f;
+	float scrim[4] = {shell->bottom_color[0] * 0.55f * sa, shell->bottom_color[1] * 0.55f * sa,
+			  shell->bottom_color[2] * 0.55f * sa, sa};
+	wlr_scene_rect_set_color(shell->lock_dim, scrim);
+	place(shell->lock_dim, 0, 0, W, H);
+
+	/* clear the per-mode nodes; each branch fills what it needs */
+	node_set(shell->lock_date_node, NULL, 0, 0);
+	node_set(shell->lock_dots_node, NULL, 0, 0);
+	node_set(shell->lock_cancel_node, NULL, 0, 0);
+	for (int i = 0; i < 12; i++)
+		node_set(shell->lock_key_node[i], NULL, 0, 0);
+	shell->lock_cancel_box = (struct wlr_box){0};
+	for (int i = 0; i < 12; i++)
+		shell->lock_key_box[i] = (struct wlr_box){0};
+
+	const char *tm, *dt;
+	lock_split_clock(shell, &tm, &dt);
+
+	if (shell->lock_mode == 0) {
+		/* clock view */
+		int cy = H * 36 / 100, tsz = H / 9;
+		struct wlr_box tbox = {W / 10, cy - tsz / 2, W * 8 / 10, tsz};
+		figtext_render(shell, shell->lock_time_node, tm, &tbox, cy, 100);
+		if (shell->strip_font && dt && dt[0]) {
+			struct wlr_buffer *b = ng_text_render(shell->strip_font, dt, DIM_COLOR, NULL, NULL);
+			if (b)
+				node_set(shell->lock_date_node, b, cx - b->width / 2, cy + tsz / 2 + H / 30);
 		}
-	} else {
-		node_set(shell->lock_date_node, NULL, 0, 0);
+		if (shell->strip_font) {
+			struct wlr_buffer *b =
+				ng_text_render(shell->strip_font, "tap to enter passcode", DIM_COLOR, NULL, NULL);
+			if (b)
+				node_set(shell->lock_hint_node, b, cx - b->width / 2, H - H / 7);
+		}
+		return;
 	}
 
-	/* bottom button row: mic - lock - camera */
-	int bd = H / 16;
-	if (bd < 34)
-		bd = 34;
-	if (bd > 60)
-		bd = 60;
-	int lbd = bd * 5 / 4;
-	int row_y = H - H / 6 - lbd;
-	int gap = W / 5;
-	shell->lock_mic_box = (struct wlr_box){cx - gap - bd / 2, row_y + (lbd - bd) / 2, bd, bd};
-	shell->lock_lock_box = (struct wlr_box){cx - lbd / 2, row_y, lbd, lbd};
-	shell->lock_cam_box = (struct wlr_box){cx + gap - bd / 2, row_y + (lbd - bd) / 2, bd, bd};
+	/* passcode view */
+	node_set(shell->lock_time_node, NULL, 0, 0);
+	int top = H / 9;
+	if (shell->strip_font) {
+		struct wlr_buffer *b = ng_text_render(shell->strip_font,
+						      shell->lock_wrong ? "Wrong Passcode" : "Enter Passcode",
+						      shell->lock_wrong ? DEFAULT_TOP : TEXT_COLOR, NULL, NULL);
+		if (b)
+			node_set(shell->lock_hint_node, b, cx - b->width / 2, top);
+	}
+	int dotd = W / 34, dotgap = W / 22;
+	struct wlr_buffer *dots = ng_dots_render(6, shell->lock_pin_len, dotd, dotgap, TEXT_COLOR);
+	if (dots)
+		node_set(shell->lock_dots_node, dots, cx - (6 * dotd + 5 * dotgap) / 2, top + H / 22);
 
-	node_set(shell->lock_mic_node, ng_button_render(bd, 1, BTN_BG, BTN_RING, BTN_FG),
-		 shell->lock_mic_box.x, shell->lock_mic_box.y);
-	node_set(shell->lock_cam_node, ng_button_render(bd, 0, BTN_BG, BTN_RING, BTN_FG),
-		 shell->lock_cam_box.x, shell->lock_cam_box.y);
-	float acc[4] = {shell->top_color[0], shell->top_color[1], shell->top_color[2], 0.9f};
-	node_set(shell->lock_lock_node, ng_button_render(lbd, 2, BTN_BG, acc, BTN_FG), shell->lock_lock_box.x,
-		 shell->lock_lock_box.y);
+	/* 3x4 keypad, lower ~55% of the screen */
+	int kd = W / 5;
+	if (kd > H / 10)
+		kd = H / 10;
+	int kgapx = W / 12, kgapy = H / 34;
+	int grid_w = 3 * kd + 2 * kgapx;
+	int gx = cx - grid_w / 2;
+	int gy = H - H / 10 - 4 * kd - 3 * kgapy;
+	struct fcft_font *kf = NULL;
+	{
+		char a[24];
+		snprintf(a, sizeof(a), "size=%d", kd * 40 / 100);
+		const char *n[] = {"JetBrains Mono"};
+		kf = fcft_from_name(1, n, a);
+	}
+	for (int i = 0; i < 12; i++) {
+		if (!LOCK_KEYS[i][0])
+			continue;
+		int col = i % 3, row = i / 3;
+		int x = gx + col * (kd + kgapx), y = gy + row * (kd + kgapy);
+		shell->lock_key_box[i] = (struct wlr_box){x, y, kd, kd};
+		float bg[4] = {1, 1, 1, i == 11 ? 0.0f : 0.13f}; /* del = no disc */
+		node_set(shell->lock_key_node[i], ng_keycap_render(kf, LOCK_KEYS[i], kd, bg, TEXT_COLOR), x, y);
+	}
+	if (kf)
+		fcft_destroy(kf);
 
 	if (shell->strip_font) {
-		struct wlr_buffer *b = ng_text_render(shell->strip_font, "tap the lock to unlock", DIM_COLOR, NULL, NULL);
-		if (b)
-			node_set(shell->lock_hint_node, b, cx - b->width / 2, row_y + lbd + H / 60);
+		struct wlr_buffer *b = ng_text_render(shell->strip_font, "Cancel", TEXT_COLOR, NULL, NULL);
+		if (b) {
+			int bx = cx - b->width / 2, by = H - H / 16;
+			shell->lock_cancel_box = (struct wlr_box){bx - 20, by - 10, b->width + 40, 44};
+			node_set(shell->lock_cancel_node, b, bx, by);
+		}
 	}
+}
+
+static void
+lock_set_mode(struct ng_shell *shell, int mode)
+{
+	shell->lock_mode = mode;
+	shell->lock_pin_len = 0;
+	shell->lock_pin[0] = 0;
+	shell->lock_wrong = 0;
+	lock_layout(shell);
 }
 
 void
@@ -555,6 +610,23 @@ ng_shell_set_locked(struct ng_shell *shell, int locked, const char *time, const 
 		str_set(&shell->lock_date_text, date);
 	shell->locked = locked;
 	if (locked) {
+		/* read the expected passcode (trim to digits) */
+		char buf[16] = {0};
+		FILE *f = fopen("/etc/neuros/passcode", "r");
+		if (f) {
+			if (fgets(buf, sizeof(buf), f)) {
+				int n = 0;
+				for (char *p = buf; *p && n < 6; p++)
+					if (*p >= '0' && *p <= '9')
+						buf[n++] = *p;
+				buf[n] = 0;
+			}
+			fclose(f);
+		}
+		str_set(&shell->lock_expected, buf[0] ? buf : "000000");
+		shell->lock_mode = 0;
+		shell->lock_pin_len = 0;
+		shell->lock_wrong = 0;
 		lock_layout(shell);
 		wlr_scene_node_raise_to_top(&shell->lock->node);
 	}
@@ -572,13 +644,38 @@ ng_shell_lock_tap(struct ng_shell *shell, double lx, double ly)
 {
 	if (!shell || !shell->locked)
 		return 0;
-	if (in_box(&shell->lock_lock_box, lx, ly)) {
-		ng_shell_set_locked(shell, 0, NULL, NULL);
+
+	if (shell->lock_mode == 0) {
+		lock_set_mode(shell, 1); /* any tap -> passcode entry */
 		return 1;
 	}
-	if (in_box(&shell->lock_mic_box, lx, ly)) {
-		ng_shell_set_mic(shell, !shell->mic_on);
-		ng_spawn("neuros-mic toggle");
+
+	if (in_box(&shell->lock_cancel_box, lx, ly)) {
+		lock_set_mode(shell, 0);
+		return 1;
+	}
+	for (int i = 0; i < 12; i++) {
+		if (!LOCK_KEYS[i][0] || !in_box(&shell->lock_key_box[i], lx, ly))
+			continue;
+		if (i == 11) { /* backspace */
+			if (shell->lock_pin_len > 0)
+				shell->lock_pin[--shell->lock_pin_len] = 0;
+			shell->lock_wrong = 0;
+		} else if (shell->lock_pin_len < 6) {
+			shell->lock_pin[shell->lock_pin_len++] = LOCK_KEYS[i][0];
+			shell->lock_pin[shell->lock_pin_len] = 0;
+			shell->lock_wrong = 0;
+		}
+		if (shell->lock_pin_len == 6) {
+			if (shell->lock_expected && strcmp(shell->lock_pin, shell->lock_expected) == 0) {
+				ng_shell_set_locked(shell, 0, NULL, NULL);
+				return 1;
+			}
+			shell->lock_wrong = 1;
+			shell->lock_pin_len = 0;
+			shell->lock_pin[0] = 0;
+		}
+		lock_layout(shell);
 		return 1;
 	}
 	return 1; /* swallow every tap while locked */

@@ -80,6 +80,10 @@ handle_line(struct ng_ipc *ipc, char *line)
 			ng_shell_set_mic(shell, !shell->mic_on);
 		else
 			ng_shell_set_mic(shell, arg && strcmp(arg, "on") == 0);
+	} else if (strcmp(line, "lock") == 0 && arg && strncmp(arg, "tap ", 4) == 0) {
+		double x = 0, y = 0;
+		if (sscanf(arg + 4, "%lf %lf", &x, &y) == 2)
+			ng_shell_lock_tap(shell, x, y);
 	} else if (strcmp(line, "lock") == 0) {
 		/* optional "HH:MM|Weekday DD Month" */
 		char *bar = arg ? strchr(arg, '|') : NULL;

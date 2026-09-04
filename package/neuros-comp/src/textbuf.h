@@ -46,4 +46,12 @@ struct wlr_buffer *ng_button_render(int d, int icon, const float bg[4], const fl
  * wlr_buffer. Takes ownership of `data` (freed with the buffer). NULL on OOM. */
 struct wlr_buffer *ng_argb_buffer(unsigned int *data, int w, int h);
 
+/* A row of `count` circles diameter `d`, `gap` px apart; the first `filled` are
+ * solid, the rest are 1.5px rings. `color` straight RGBA. */
+struct wlr_buffer *ng_dots_render(int count, int filled, int d, int gap, const float color[4]);
+
+/* Round keycap: filled circle `d` px in `bg` with `label` centred in `font`/`fg`. */
+struct wlr_buffer *ng_keycap_render(struct fcft_font *font, const char *label, int d, const float bg[4],
+				    const float fg[4]);
+
 #endif

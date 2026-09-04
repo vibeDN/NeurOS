@@ -406,6 +406,86 @@ ng_dot_render(int d, const float color[4], int ring, const float ringcol[4])
 	return buf_from_data(data, d, d);
 }
 
+struct wlr_buffer *
+ng_dots_render(int count, int filled, int d, int gap, const float color[4])
+{
+	if (count < 1 || d < 3)
+		return NULL;
+	int W = count * d + (count - 1) * gap, H = d;
+	uint32_t *data = calloc((size_t) W * H, 4);
+	if (!data)
+		return NULL;
+	float rad = d / 2.0f, ring = d / 8.0f < 1.5f ? 1.5f : d / 8.0f;
+	for (int i = 0; i < count; i++) {
+		int ox = i * (d + gap);
+		float cx = ox + (d - 1) / 2.0f, cy = (d - 1) / 2.0f;
+		for (int y = 0; y < d; y++)
+			for (int x = 0; x < d; x++) {
+				float dist = sqrtf((ox + x - cx) * (ox + x - cx) + (y - cy) * (y - cy));
+				float cov = rad - dist;
+				if (cov <= 0)
+					continue;
+				if (cov > 1)
+					cov = 1;
+				float a = color[3];
+				if (i >= filled && dist < rad - ring)
+					a = 0; /* hollow */
+				if (a > 0)
+					data[(size_t) y * W + ox + x] = premul(color[0], color[1], color[2], a * cov);
+			}
+	}
+	return buf_from_data(data, W, H);
+}
+
+struct wlr_buffer *
+ng_keycap_render(struct fcft_font *font, const char *label, int d, const float bg[4], const float fg[4])
+{
+	if (d < 8)
+		return NULL;
+	uint32_t *data = calloc((size_t) d * d, 4);
+	if (!data)
+		return NULL;
+	float c = (d - 1) / 2.0f, rad = d / 2.0f;
+	for (int y = 0; y < d; y++)
+		for (int x = 0; x < d; x++) {
+			float dist = sqrtf((x - c) * (x - c) + (y - c) * (y - c));
+			float cov = rad - dist;
+			if (cov <= 0)
+				continue;
+			if (cov > 1)
+				cov = 1;
+			data[(size_t) y * d + x] = premul(bg[0], bg[1], bg[2], bg[3] * cov);
+		}
+	if (font && label && label[0]) {
+		uint32_t cps[8];
+		size_t n = utf8_decode(label, cps, 8);
+		int tw = 0;
+		for (size_t i = 0; i < n; i++) {
+			const struct fcft_glyph *g = fcft_rasterize_char_utf32(font, cps[i], FCFT_SUBPIXEL_NONE);
+			if (g)
+				tw += g->advance.x;
+		}
+		int th = font->ascent + font->descent;
+		pixman_image_t *dst = pixman_image_create_bits(PIXMAN_a8r8g8b8, d, d, data, (size_t) d * 4);
+		pixman_color_t pc = {(uint16_t) (fg[0] * 0xffff), (uint16_t) (fg[1] * 0xffff), (uint16_t) (fg[2] * 0xffff),
+				     (uint16_t) (fg[3] * 0xffff)};
+		pixman_image_t *src = pixman_image_create_solid_fill(&pc);
+		int pen = (d - tw) / 2, base = (d - th) / 2 + font->ascent;
+		for (size_t i = 0; i < n; i++) {
+			const struct fcft_glyph *g = fcft_rasterize_char_utf32(font, cps[i], FCFT_SUBPIXEL_NONE);
+			if (!g)
+				continue;
+			if (g->pix)
+				pixman_image_composite32(PIXMAN_OP_OVER, src, g->pix, dst, 0, 0, 0, 0, pen + g->x,
+							 base - g->y, g->width, g->height);
+			pen += g->advance.x;
+		}
+		pixman_image_unref(src);
+		pixman_image_unref(dst);
+	}
+	return buf_from_data(data, d, d);
+}
+
 /* -- overlay buttons (camera / mic) ---------------------------------- */
 
 /* add a soft round dab of coverage into an f32 map */

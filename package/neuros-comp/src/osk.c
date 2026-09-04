@@ -514,11 +514,11 @@ osk_render(struct ng_osk *osk)
 	int pad = H / 44;
 	int gap = H / 100;
 	int rowh = (H - 2 * pad - (rows - 1) * gap) / rows;
-	int krad = rowh / 8; /* subtle rounded-rect, not a pill */
-	if (krad < 4)
-		krad = 4;
-	if (krad > 12)
-		krad = 12;
+	int krad = rowh / 12; /* mild rounded-rect */
+	if (krad < 3)
+		krad = 3;
+	if (krad > 8)
+		krad = 8;
 	struct fcft_font *font = osk_font(rowh);
 
 	struct key(*L)[ROWMAX] = cur_rows(osk);

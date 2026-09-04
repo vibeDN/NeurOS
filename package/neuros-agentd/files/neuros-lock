@@ -1,7 +1,15 @@
 #!/bin/sh
-# Show / hide the NeurOS lockscreen (compositor overlay; tap the lock to unlock).
+# Show / hide the NeurOS lockscreen (clock -> tap -> 6-digit passcode).
+PIN_FILE=/etc/neuros/passcode
+
 case "${1:-lock}" in
 lock)   neuros-ctl lock "$(date '+%H:%M')|$(date '+%A, %d %B')" ;;
 unlock) neuros-ctl unlock ;;
-*)      echo "usage: neuros-lock [lock|unlock]" >&2; exit 2 ;;
+setpin)
+	pin=$(printf '%s' "${2:-}" | tr -cd '0-9' | cut -c1-6)
+	[ "${#pin}" -eq 6 ] || { echo "need 6 digits" >&2; exit 2; }
+	mkdir -p "$(dirname "$PIN_FILE")"
+	printf '%s\n' "$pin" > "$PIN_FILE" && chmod 600 "$PIN_FILE" && echo "passcode set"
+	;;
+*)      echo "usage: neuros-lock [lock|unlock|setpin <6 digits>]" >&2; exit 2 ;;
 esac
