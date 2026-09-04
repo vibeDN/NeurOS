@@ -24,10 +24,11 @@
 #include "shell.h"
 #include "textbuf.h"
 
-/* glassmorphism palette (Claude Design pass, see docs/DESIGN-IMPL.md) */
-static const float FRAME_COLOR[4] = {1.0f, 1.0f, 1.0f, 0.30f};    /* glass border */
-static const float PANE_TINT[4] = {1.0f, 1.0f, 1.0f, 0.10f};      /* glass fill */
-static const float TEXT_COLOR[4] = {0.992f, 0.984f, 0.973f, 1.0f}; /* #fdfbf8 */
+/* glassmorphism palette (Claude Design pass). wlr_scene_rect wants PREMULTIPLIED
+ * colours - so rgb is already scaled by alpha here. */
+static const float FRAME_COLOR[4] = {0.28f, 0.28f, 0.28f, 0.28f}; /* white @ .28 */
+static const float PANE_TINT[4] = {0.11f, 0.11f, 0.11f, 0.11f};   /* white @ .11 */
+static const float TEXT_COLOR[4] = {0.992f, 0.984f, 0.973f, 1.0f}; /* #fdfbf8, ng_text_render (straight) */
 static const float STRIP_COLOR[4] = {0.992f, 0.984f, 0.973f, 0.92f};
 
 /* default wallpaper = Claude accent -> darker shade (#D97757 -> #4a2415) */
