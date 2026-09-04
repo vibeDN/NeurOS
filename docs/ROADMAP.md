@@ -258,9 +258,18 @@ minimal Android property/HAL container (for camera). Packaged in this BR2_EXTERN
 - Stand up an aarch64 Termux chroot on the phone for userspace smoke tests.
 
 ## Still open
-- Pick the exact newest-stable HyperOS fastboot ROM build for sweet to harvest from.
-- Claw'd mascot: rights request sent to Anthropic (pending). Generic mascot until
-  a reply.
+- **Big-font look.** User picked FIGlet **Standard** over `banner`. It now renders
+  correctly (`flf_render_string` + kerning/smushing + fcft mono, sized to the
+  pane, screenshots `output/m2-std*.png`) - but Standard is thin line-art, so at
+  display size it reads low-contrast on the gradient, not bold like
+  `docs/ui-mockup-v0.jpg`. Options: (a) a thicker/blockier `.flf` (e.g. `block`,
+  `colossal`, a custom one), (b) a bold TTF via fcft (drop FIGlet for the big
+  text), (c) accept thin Standard. Both `neuros-standard.flf` and
+  `neuros-banner.flf` are bundled; `NG_FONT_PATH` selects.
+- Lockscreen unlock gesture (PIN / any-key / pattern).
+- Camera pane + on-screen mic/camera button placement.
+- Pick the exact newest-stable HyperOS fastboot ROM build for sweet.
+- Claw'd mascot: rights request sent to Anthropic (pending).
 
 ## Storage layout
 
