@@ -142,13 +142,16 @@ ng_text_render(struct fcft_font *font, const char *utf8, const float color[4], i
 	}
 
 	int line_h = font->ascent + font->descent;
+	/* some glyphs (/, \, {, _ ...) overshoot the nominal ascent/descent - pad
+	 * the buffer so they aren't clipped at the top / bottom edge */
+	int vpad = line_h / 3 + 2;
 	int width = 1;
 	for (int l = 0; l < nlines; l++) {
 		int w = line_width(font, cps + lstart[l], llen[l]);
 		if (w > width)
 			width = w;
 	}
-	int height = line_h * nlines;
+	int height = line_h * nlines + 2 * vpad;
 	if (width < 1 || height < 1)
 		return NULL;
 
@@ -168,7 +171,7 @@ ng_text_render(struct fcft_font *font, const char *utf8, const float color[4], i
 
 	for (int l = 0; l < nlines; l++) {
 		int pen = 0;
-		int baseline = l * line_h + font->ascent;
+		int baseline = vpad + l * line_h + font->ascent;
 		for (size_t i = 0; i < llen[l]; i++) {
 			const struct fcft_glyph *g =
 				fcft_rasterize_char_utf32(font, cps[lstart[l] + i], FCFT_SUBPIXEL_NONE);

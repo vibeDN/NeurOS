@@ -519,9 +519,9 @@ lock_layout(struct ng_shell *shell)
 
 	if (shell->lock_mode == 0) {
 		/* clock view */
-		int cy = H * 36 / 100, tsz = H / 9;
-		struct wlr_box tbox = {W / 10, cy - tsz / 2, W * 8 / 10, tsz};
-		figtext_render(shell, shell->lock_time_node, tm, &tbox, cy, 100);
+		int cy = H * 33 / 100, tsz = H / 8;
+		struct wlr_box tbox = {W / 12, cy - tsz / 2, W * 10 / 12, tsz};
+		figtext_render(shell, shell->lock_time_node, tm, &tbox, cy, 94);
 		if (shell->strip_font && dt && dt[0]) {
 			struct wlr_buffer *b = ng_text_render(shell->strip_font, dt, DIM_COLOR, NULL, NULL);
 			if (b)
@@ -558,7 +558,7 @@ lock_layout(struct ng_shell *shell)
 	int kgapx = W / 12, kgapy = H / 34;
 	int grid_w = 3 * kd + 2 * kgapx;
 	int gx = cx - grid_w / 2;
-	int gy = H - H / 10 - 4 * kd - 3 * kgapy;
+	int gy = H - H / 7 - 4 * kd - 3 * kgapy;
 	struct fcft_font *kf = NULL;
 	{
 		char a[24];
@@ -575,16 +575,17 @@ lock_layout(struct ng_shell *shell)
 		float bg[4] = {1, 1, 1, i == 11 ? 0.0f : 0.13f}; /* del = no disc */
 		node_set(shell->lock_key_node[i], ng_keycap_render(kf, LOCK_KEYS[i], kd, bg, TEXT_COLOR), x, y);
 	}
-	if (kf)
-		fcft_destroy(kf);
 
-	if (shell->strip_font) {
-		struct wlr_buffer *b = ng_text_render(shell->strip_font, "Cancel", TEXT_COLOR, NULL, NULL);
+	/* Cancel: a real pill button under the keypad */
+	if (kf) {
+		static const float cpill[4] = {1.0f, 1.0f, 1.0f, 0.12f};
+		struct wlr_buffer *b = ng_pill_text_render(kf, "Cancel", TEXT_COLOR, cpill, kd / 4, kd / 8);
 		if (b) {
-			int bx = cx - b->width / 2, by = H - H / 16;
-			shell->lock_cancel_box = (struct wlr_box){bx - 20, by - 10, b->width + 40, 44};
+			int bx = cx - b->width / 2, by = H - H / 16 - b->height / 2;
+			shell->lock_cancel_box = (struct wlr_box){bx, by, b->width, b->height};
 			node_set(shell->lock_cancel_node, b, bx, by);
 		}
+		fcft_destroy(kf);
 	}
 }
 
