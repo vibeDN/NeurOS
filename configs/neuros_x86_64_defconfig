@@ -86,6 +86,7 @@ BR2_PACKAGE_DEJAVU_SANS_MONO=y
 
 # --- M3: agent orchestrator ---
 BR2_PACKAGE_TMUX=y
+BR2_PACKAGE_JQ=y
 BR2_PACKAGE_NEUROS_AGENTD=y
 # interactive login shell (serial console + ssh); system scripts stay on /bin/sh
 BR2_PACKAGE_FISH=y

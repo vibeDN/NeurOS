@@ -1,0 +1,47 @@
+#!/bin/sh
+# Claude Code Stop hook. Reads the hook JSON on stdin, pulls the agent's last
+# reply out of the session transcript, and drops it where neuros-agentd's TTS
+# poller can pick it up ($XDG_RUNTIME_DIR/neuros/reply.txt).
+#
+# Registered via ~/.claude/settings.json "hooks.Stop". Must exit 0 fast and
+# never block the agent.
+set -u
+
+# shared drop dir (agentd, as root, creates /run/neuros mode 1777 so the
+# unprivileged agent user can write here too)
+RT=/run/neuros
+[ -d "$RT" ] && [ -w "$RT" ] || RT="${XDG_RUNTIME_DIR:-/tmp}/neuros"
+mkdir -p "$RT" 2>/dev/null || RT=/tmp
+
+payload=$(cat)
+tp=$(printf '%s' "$payload" | jq -r '.transcript_path // empty' 2>/dev/null)
+[ -n "$tp" ] && [ -f "$tp" ] || exit 0
+
+extract() {
+	jq -rs '
+		[ .[] | select(.type == "assistant") ] as $a
+		| ($a | last) // {}
+		| [ .message.content[]? | select(.type == "text") | .text ] | join("\n")
+	' "$tp" 2>/dev/null
+}
+
+# the final assistant message may not be flushed to the transcript the instant
+# the Stop hook fires - wait briefly for it to settle
+reply=$(extract)
+i=0
+while [ $i -lt 10 ]; do
+	sleep 0.3
+	next=$(extract)
+	[ "$next" = "$reply" ] && [ -n "$reply" ] && break
+	reply=$next
+	i=$((i + 1))
+done
+
+[ -n "$reply" ] || exit 0
+
+# strip markdown/ANSI the same way the pane filter does, collapse whitespace
+printf '%s\n' "$reply" \
+	| { command -v /usr/lib/neuros/tts-filter >/dev/null 2>&1 && /usr/lib/neuros/tts-filter || cat; } \
+	| tr '\n' ' ' | sed -E 's/  +/ /g; s/^ +//; s/ +$//' > "$RT/reply.txt.tmp"
+mv -f "$RT/reply.txt.tmp" "$RT/reply.txt"
+exit 0

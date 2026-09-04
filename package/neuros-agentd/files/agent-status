@@ -1,14 +1,23 @@
 #!/bin/sh
-# Read one line of agent output, print a status word (or nothing).
-# Patterns target the Claude Code TUI; extended per-agent later.
-read -r l || exit 0
-case "$l" in
-	*"esc to interrupt"*|*"tokens"*"esc"*|*"Running"*|*"Bash("*|*"Edit("*|*"Write("*|*"Update("*)
-		echo Working ;;
-	*"Thinking"*|*"Pondering"*|*"Deliberating"*|*"✻"*|*"Puzzling"*)
-		echo Thinking ;;
-	*"Do you want"*|*"(y/n)"*|*"Continue?"*|*"❯ 1."*|*"Proceed"*)
-		echo Waiting ;;
-	*"? for shortcuts"*|*"Bypassing"*|*"╰────"*)
-		echo Idle ;;
+# Classify the agent's *visible pane* (whole block on stdin) -> a status word.
+# Tuned for Claude Code v2's TUI (spinner line carries "esc to interrupt";
+# a finished turn shows "... · done H:MMam"). Falls back to Idle.
+t=$(cat)
+
+case "$t" in
+# permission / choice prompt waiting on the user
+*"Do you want"*|*"❯ 1. Yes"*|*"1. Yes"*|*"Continue?"*|*"(y/n)"*)
+	echo Waiting; exit 0 ;;
 esac
+
+case "$t" in
+*"esc to interrupt"*|*"ctrl+c to"*|*"(esc)"*" to interrupt"*)
+	case "$t" in
+	*"Thinking"*|*"Pondering"*|*"Reflecting"*|*"Deliberating"*|*"Puzzling"*|*"Ruminating"*)
+		echo Thinking ;;
+	*)	echo Working ;;
+	esac
+	exit 0 ;;
+esac
+
+echo Idle

@@ -23,6 +23,11 @@ TTS="$RT/tts.txt"
 : > "$RAW"
 : > "$TTS"
 
+# shared dir the (unprivileged) agent user can also write to - the Claude Code
+# Stop hook drops the reply text here for TTS
+SHARE=/run/neuros
+mkdir -p "$SHARE" && chmod 1777 "$SHARE"
+
 log() { echo "[agentd] $*" >&2; }
 
 # 1. create the agent session immediately - neuros-session is waiting on it
@@ -67,33 +72,16 @@ speak() {
 		aplay -q -r 22050 -f S16_LE -c 1 -t raw - 2>/dev/null
 }
 
-# is this a prose line worth keeping / speaking?
-is_prose() {
-	case "$1" in
-	*[a-z]*) ;;
-	*) return 1 ;;
-	esac
-	[ "${#1}" -ge 6 ] || return 1
-	[ "${1#>}" = "$1" ] || return 1
-	[ "${1#*"? for shortcuts"}" = "$1" ] || return 1
-	[ "${1#*"esc to interrupt"}" = "$1" ] || return 1
-	[ "${1#*Thinking}" = "$1" ] || return 1
-	return 0
-}
+# The agent's reply text comes from the Claude Code Stop hook (neuros-agent-hook
+# -> $RT/reply.txt), which reads the session transcript - far more reliable than
+# scraping the redraw-heavy TUI. Fall back to nothing if the hook didn't fire.
+# the Stop hook (running as the agent user) owns this file; we only read it
+REPLY_FILE="$SHARE/reply.txt"
+rm -f "$REPLY_FILE"
 
-# Buffer the agent's reply and speak it once it's finished (status -> Idle/Waiting),
-# not line by line.
-BUF=""
-LASTSPEAK=""
+# (a) activity sub-line: watch the raw pipe for tool calls -> "using <tool>"
 tail -n0 -F "$RAW" 2>/dev/null | while IFS= read -r line; do
-	clean=$(printf '%s\n' "$line" | /usr/lib/neuros/tts-filter)
-	printf '%s\n' "$clean" >> "$TTS"
-
-	if is_prose "$clean"; then
-		BUF="$BUF$clean "
-	fi
-
-	# activity sub-line: a tool call in the raw output -> "using <tool>"
+	printf '%s\n' "$line" | /usr/lib/neuros/tts-filter >> "$TTS"
 	case "$line" in
 	*"Bash("*)   neuros-ctl activity "bash" 2>/dev/null || true ;;
 	*"Edit("* | *"Update("* | *"Write("*) neuros-ctl activity "edit" 2>/dev/null || true ;;
@@ -101,28 +89,37 @@ tail -n0 -F "$RAW" 2>/dev/null | while IFS= read -r line; do
 	*"Grep("* | *"Glob("* | *"Search("*) neuros-ctl activity "search" 2>/dev/null || true ;;
 	*"WebFetch"* | *"WebSearch"*) neuros-ctl activity "the web" 2>/dev/null || true ;;
 	esac
+done &
+WATCH=$!
 
-	st=$(printf '%s\n' "$line" | /usr/lib/neuros/agent-status)
-	if [ -n "$st" ]; then
+# (b) status poller: classify the whole visible pane once a second; speak the
+# reply on the busy -> Idle edge.
+PREV=Idle
+LASTSPEAK=""
+while tmux has-session -t "$TMUX_SESSION" 2>/dev/null; do
+	st=$(tmux capture-pane -t "$TMUX_SESSION" -p 2>/dev/null | /usr/lib/neuros/agent-status)
+	: "${st:=Idle}"
+	if [ "$st" != "$PREV" ]; then
 		neuros-ctl status "$st" 2>/dev/null || true
 		case "$st" in
 		Idle | Waiting)
 			neuros-ctl activity "" 2>/dev/null || true
-			trimmed=$(printf '%s' "$BUF" | sed -E 's/^ +//; s/ +$//')
-			if [ -n "$trimmed" ] && [ "$trimmed" != "$LASTSPEAK" ]; then
-				speak "$trimmed" &
-				LASTSPEAK="$trimmed"
-			fi
-			BUF=""
+			case "$PREV" in
+			Working | Thinking)
+				# the Stop hook may land a beat after the UI goes idle
+				sleep 1
+				msg=$(cat "$REPLY_FILE" 2>/dev/null)
+				if [ -n "$msg" ] && [ "$msg" != "$LASTSPEAK" ]; then
+					speak "$msg" &
+					LASTSPEAK="$msg"
+				fi
+				;;
+			esac
 			;;
 		esac
+		PREV="$st"
 	fi
-done &
-WATCH=$!
-
-# exit with the agent session
-while tmux has-session -t "$TMUX_SESSION" 2>/dev/null; do
-	sleep 2
+	sleep 1
 done
 kill "$WATCH" 2>/dev/null
 neuros-ctl status Idle 2>/dev/null || true

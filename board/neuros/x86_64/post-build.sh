@@ -72,11 +72,17 @@ if [ -x "$TARGET_DIR/opt/claude-code/claude" ] && [ -f "$HOME/.claude/.credentia
 		EOF
 		chmod 0600 "$h/.claude.json"
 	done
-	# agent (non-root): bypassPermissions is fine -> fully autonomous voice flow
+	# agent (non-root): bypassPermissions is fine -> fully autonomous voice flow.
+	# Stop hook feeds the reply to NeurOS TTS (neuros-agent-hook -> reply.txt).
 	cat > "$AGENT_HOME/.claude/settings.json" <<-'EOF'
 	{
 	  "permissions": { "defaultMode": "bypassPermissions" },
-	  "includeCoAuthoredBy": false
+	  "includeCoAuthoredBy": false,
+	  "hooks": {
+	    "Stop": [
+	      { "hooks": [ { "type": "command", "command": "/usr/lib/neuros/neuros-agent-hook" } ] }
+	    ]
+	  }
 	}
 	EOF
 	# root (for manual `claude` over ssh): bypass is refused as root -> acceptEdits

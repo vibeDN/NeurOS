@@ -19,6 +19,7 @@ define NEUROS_AGENTD_INSTALL_TARGET_CMDS
 	$(INSTALL) -D -m 0755 $(@D)/neuros-mic $(TARGET_DIR)/usr/bin/neuros-mic
 	$(INSTALL) -D -m 0755 $(@D)/neuros-clock $(TARGET_DIR)/usr/lib/neuros/neuros-clock
 	$(INSTALL) -D -m 0755 $(@D)/neuros-lock $(TARGET_DIR)/usr/bin/neuros-lock
+	$(INSTALL) -D -m 0755 $(@D)/neuros-agent-hook $(TARGET_DIR)/usr/lib/neuros/neuros-agent-hook
 	$(INSTALL) -D -m 0644 $(@D)/agentd.conf $(TARGET_DIR)/etc/neuros/agentd.conf
 endef
 
