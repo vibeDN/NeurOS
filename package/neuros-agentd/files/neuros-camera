@@ -26,8 +26,18 @@ case "${1:-toggle}" in
 toggle) command -v neuros-ctl >/dev/null && neuros-ctl camera toggle ;;
 on)     command -v neuros-ctl >/dev/null && neuros-ctl camera on ;;
 off)    command -v neuros-ctl >/dev/null && neuros-ctl camera off ;;
-start)  : > "$RT/camera" ;;
-stop)   rm -f "$RT/camera" ;;
+start)
+	: > "$RT/camera"
+	# spin up the live viewfinder feed if it isn't already running
+	if ! pgrep -f '[n]euros-camera-feed' >/dev/null 2>&1; then
+		setsid neuros-camera-feed >/dev/null 2>&1 &
+	fi
+	;;
+stop)
+	rm -f "$RT/camera"
+	pkill -f '[n]euros-camera-feed' 2>/dev/null || true
+	rm -f /run/neuros/camframe/frame.raw 2>/dev/null || true
+	;;
 shot)   grab ;;
 *)      echo "usage: neuros-camera [toggle|on|off|start|stop|shot]" >&2; exit 2 ;;
 esac

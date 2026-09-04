@@ -107,6 +107,8 @@ struct ng_shell {
 	struct wlr_scene_buffer *camv_hint_node;
 	struct wlr_box camv_view_box, camv_back_box, camv_shot_box;
 	int camera_on;
+	struct wl_event_source *camv_timer; /* polls the live frame while camera_on */
+	long camv_frame_sec, camv_frame_nsec;
 
 	int width, height;
 	int frame_t;   /* hairline border */

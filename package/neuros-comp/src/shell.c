@@ -13,12 +13,15 @@
 #define _POSIX_C_SOURCE 200809L
 
 #include <signal.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <sys/wait.h>
 #include <unistd.h>
 #include <fcft/fcft.h>
+#include <wayland-server-core.h>
 #include <wlr/types/wlr_buffer.h>
 #include <wlr/types/wlr_scene.h>
 #include <wlr/util/log.h>
@@ -314,6 +317,8 @@ ng_shell_destroy(struct ng_shell *shell)
 	free(shell->lock_time_text);
 	free(shell->lock_expected);
 	free(shell->lock_date_text);
+	if (shell->camv_timer)
+		wl_event_source_remove(shell->camv_timer);
 	if (shell->strip_font)
 		fcft_destroy(shell->strip_font);
 	if (shell->big_font)
@@ -800,6 +805,59 @@ camera_layout(struct ng_shell *shell)
 	node_set(shell->camv_shot_node, ng_button_render(sd, 5, BTN_BG, ring, BTN_FG), sx, sy);
 }
 
+/* live viewfinder: neuros-camera-feed writes /run/neuros/camframe/frame.raw as an
+ * 8-byte LE header (uint32 w, uint32 h) + w*h ARGB8888 pixels, overwritten in
+ * place each frame. We poll its mtime ~15x/s and swap the buffer when it moves. */
+#define NG_CAM_FRAME "/run/neuros/camframe/frame.raw"
+
+static int
+camv_tick(void *data)
+{
+	struct ng_shell *shell = data;
+	if (!shell->camera_on || !shell->camv_timer)
+		return 0;
+
+	struct stat st;
+	if (stat(NG_CAM_FRAME, &st) == 0 && st.st_size > 8 &&
+	    (st.st_mtim.tv_sec != shell->camv_frame_sec || st.st_mtim.tv_nsec != shell->camv_frame_nsec)) {
+		FILE *f = fopen(NG_CAM_FRAME, "rb");
+		if (f) {
+			uint32_t hdr[2] = {0, 0};
+			if (fread(hdr, 4, 2, f) == 2) {
+				int w = (int) hdr[0], h = (int) hdr[1];
+				size_t need = (size_t) w * h * 4;
+				if (w >= 16 && w <= 4096 && h >= 16 && h <= 4096 &&
+				    (long) (need + 8) <= st.st_size) {
+					unsigned int *px = malloc(need);
+					if (px && fread(px, 1, need, f) == need) {
+						struct wlr_buffer *b = ng_argb_buffer(px, w, h);
+						if (b) {
+							struct wlr_box *vb = &shell->camv_view_box;
+							wlr_scene_buffer_set_buffer(shell->camv_view_node, b);
+							wlr_scene_buffer_set_dest_size(shell->camv_view_node, vb->width,
+										      vb->height);
+							wlr_buffer_drop(b);
+							wlr_scene_node_set_position(&shell->camv_view_node->node, vb->x,
+										   vb->y);
+							/* real frames arrived - drop the "camera view" placeholder */
+							if (shell->camv_hint_node)
+								wlr_scene_node_set_enabled(
+									&shell->camv_hint_node->node, false);
+						}
+						px = NULL; /* ng_argb_buffer owns it now */
+					}
+					free(px);
+					shell->camv_frame_sec = st.st_mtim.tv_sec;
+					shell->camv_frame_nsec = st.st_mtim.tv_nsec;
+				}
+			}
+			fclose(f);
+		}
+	}
+	wl_event_source_timer_update(shell->camv_timer, 66);
+	return 0;
+}
+
 void
 ng_shell_set_camera(struct ng_shell *shell, int on)
 {
@@ -811,9 +869,21 @@ ng_shell_set_camera(struct ng_shell *shell, int on)
 	shell->camera_on = on;
 	if (on) {
 		camera_layout(shell);
+		if (shell->camv_hint_node)
+			wlr_scene_node_set_enabled(&shell->camv_hint_node->node, true);
 		wlr_scene_node_raise_to_top(&shell->camv->node);
 		ng_spawn("command -v neuros-camera >/dev/null && neuros-camera start || true");
+		shell->camv_frame_sec = shell->camv_frame_nsec = 0; /* force first load */
+		if (!shell->camv_timer && shell->server && shell->server->wl_display)
+			shell->camv_timer = wl_event_loop_add_timer(
+				wl_display_get_event_loop(shell->server->wl_display), camv_tick, shell);
+		if (shell->camv_timer)
+			wl_event_source_timer_update(shell->camv_timer, 1); /* 0 would disarm */
 	} else {
+		if (shell->camv_timer)
+			wl_event_source_remove(shell->camv_timer);
+		shell->camv_timer = NULL;
+		camera_layout(shell); /* restore the placeholder panel */
 		ng_spawn("command -v neuros-camera >/dev/null && neuros-camera stop || true");
 	}
 	wlr_scene_node_set_enabled(&shell->camv->node, on);

@@ -1,0 +1,56 @@
+#!/bin/sh
+# Live viewfinder frame source for the compositor.
+#
+# Writes /run/neuros/camframe/frame.raw, overwritten in place each frame:
+#   bytes 0..7  : uint32 LE width, uint32 LE height
+#   bytes 8..   : width*height ARGB8888 (little-endian: B,G,R,A per pixel)
+#
+# Real path: ffmpeg from /dev/video0. Dev VM (no camera / no ffmpeg): a slow
+# pulsing grey rectangle, just to prove the compositor reload path.
+set -u
+
+D=/run/neuros/camframe
+mkdir -p "$D" 2>/dev/null || true
+W=${NEUROS_CAM_W:-480}
+H=${NEUROS_CAM_H:-360}
+FR="$D/frame.raw"
+
+# 8-byte little-endian header for the current W/H
+le32() { printf '%b' "$(printf '\\%03o\\%03o\\%03o\\%03o' \
+	$(( $1 & 255 )) $(( ($1 >> 8) & 255 )) $(( ($1 >> 16) & 255 )) $(( ($1 >> 24) & 255 )))"; }
+hdr() { le32 "$W"; le32 "$H"; }
+
+cleanup() { [ -n "${FFPID:-}" ] && kill "$FFPID" 2>/dev/null; exit 0; }
+trap cleanup INT TERM
+
+if [ -e /dev/video0 ] && command -v ffmpeg >/dev/null 2>&1; then
+	FIFO="$D/.feed.bgra"
+	rm -f "$FIFO"; mkfifo "$FIFO" 2>/dev/null
+	ffmpeg -hide_banner -loglevel error -f v4l2 -video_size "${W}x${H}" -i /dev/video0 \
+		-pix_fmt bgra -f rawvideo -y "$FIFO" &
+	FFPID=$!
+	fsz=$(( W * H * 4 ))
+	while kill -0 "$FFPID" 2>/dev/null; do
+		if dd if="$FIFO" of="$D/.body" bs="$fsz" count=1 2>/dev/null; then
+			{ hdr; cat "$D/.body"; } > "$FR.n" 2>/dev/null && mv "$FR.n" "$FR"
+		else
+			break
+		fi
+	done
+	cleanup
+fi
+
+# --- synthetic fallback: opaque pulsing grey (BGRA, A=255) --------------------
+# built from printf %b octal escapes only - no raw bytes through the shell.
+t=0
+while :; do
+	v=$(( 60 + (t * 26) % 150 ))                 # 60..210 pulse
+	o=$(printf '%03o' "$v")
+	px="\\$o\\$o\\$o\\377"
+	row=""; i=0
+	while [ "$i" -lt "$W" ]; do row="$row$px"; i=$(( i + 1 )); done
+	{ hdr; y=0; while [ "$y" -lt "$H" ]; do printf '%b' "$row"; y=$(( y + 1 )); done; } \
+		> "$FR.n" 2>/dev/null && mv "$FR.n" "$FR"
+	t=$(( t + 1 ))
+	sleep 0.3
+done

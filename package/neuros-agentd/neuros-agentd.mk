@@ -20,6 +20,7 @@ define NEUROS_AGENTD_INSTALL_TARGET_CMDS
 	$(INSTALL) -D -m 0755 $(@D)/neuros-clock $(TARGET_DIR)/usr/lib/neuros/neuros-clock
 	$(INSTALL) -D -m 0755 $(@D)/neuros-lock $(TARGET_DIR)/usr/bin/neuros-lock
 	$(INSTALL) -D -m 0755 $(@D)/neuros-camera $(TARGET_DIR)/usr/bin/neuros-camera
+	$(INSTALL) -D -m 0755 $(@D)/neuros-camera-feed $(TARGET_DIR)/usr/bin/neuros-camera-feed
 	$(INSTALL) -D -m 0755 $(@D)/neuros-vol $(TARGET_DIR)/usr/bin/neuros-vol
 	$(INSTALL) -D -m 0755 $(@D)/neuros-tts $(TARGET_DIR)/usr/bin/neuros-tts
 	$(INSTALL) -D -m 0755 $(@D)/neuros-screen $(TARGET_DIR)/usr/bin/neuros-screen
