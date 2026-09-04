@@ -272,6 +272,12 @@ struct ng_osk {
 	enum layer letter; /* LY_EN or LY_RU - what ?123 / emoji return to */
 	bool shift;
 	bool visible;
+
+	/* press/hold state */
+	struct key *pressed;     /* key drawn as held (highlight), or NULL */
+	uint16_t held_code;      /* char key currently held down for repeat, 0 = none */
+	uint8_t held_group;
+	bool held_shift;
 };
 
 static const struct wlr_keyboard_impl kb_impl = {.name = "neuros-osk"};
@@ -318,24 +324,41 @@ raw_key(struct ng_osk *osk, uint32_t code, bool pressed)
 	wlr_seat_keyboard_notify_key(osk->server->seat->seat, t, code, st);
 }
 
+/* press a key and leave it down (client-side auto-repeat kicks in) */
 static void
-osk_send(struct ng_osk *osk, uint16_t code, bool shift, uint8_t group)
+osk_key_down(struct ng_osk *osk, uint16_t code, bool shift, uint8_t group)
 {
 	if (!osk->kb_ready)
 		return;
 	struct wlr_seat *seat = osk->server->seat->seat;
 	wlr_seat_set_keyboard(seat, &osk->kb);
-
-	uint32_t dep = shift ? 0x1u : 0u; /* Shift = modifier bit 0 */
-	wlr_keyboard_notify_modifiers(&osk->kb, dep, 0, 0, group);
+	wlr_keyboard_notify_modifiers(&osk->kb, shift ? 0x1u : 0u, 0, 0, group);
 	wlr_seat_keyboard_notify_modifiers(seat, &osk->kb.modifiers);
-
 	raw_key(osk, code, true);
-	raw_key(osk, code, false);
+	osk->held_code = code;
+	osk->held_group = group;
+	osk->held_shift = shift;
+	wlr_idle_notifier_v1_notify_activity(osk->server->idle, seat);
+}
 
+static void
+osk_key_up(struct ng_osk *osk)
+{
+	if (!osk->kb_ready || !osk->held_code)
+		return;
+	struct wlr_seat *seat = osk->server->seat->seat;
+	raw_key(osk, osk->held_code, false);
 	wlr_keyboard_notify_modifiers(&osk->kb, 0, 0, 0, 0);
 	wlr_seat_keyboard_notify_modifiers(seat, &osk->kb.modifiers);
-	wlr_idle_notifier_v1_notify_activity(osk->server->idle, seat);
+	osk->held_code = 0;
+}
+
+/* a full tap (down+up) for control keys / discrete injection */
+static void
+osk_send(struct ng_osk *osk, uint16_t code, bool shift, uint8_t group)
+{
+	osk_key_down(osk, code, shift, group);
+	osk_key_up(osk);
 }
 
 /* -- rendering ----------------------------------------------------------- */
@@ -513,7 +536,8 @@ osk_render(struct ng_osk *osk)
 			struct wlr_box local = {(int) x, y, kw, rowh};
 
 			bool hot = (k->kind == KK_SHIFT && osk->shift) || (k->kind == KK_LANG && osk->layer == LY_RU);
-			fill_rr(data, W, H, local, krad, hot ? 0.30f : 0.13f);
+			bool down = (k == osk->pressed);
+			fill_rr(data, W, H, local, krad, down ? 0.42f : hot ? 0.30f : 0.13f);
 
 			const char *lbl = k->lbl;
 			char up[8];
@@ -581,6 +605,7 @@ ng_osk_create(struct cg_server *server)
 			km = xkb_keymap_new_from_names(ctx, NULL, XKB_KEYMAP_COMPILE_NO_FLAGS);
 		if (km) {
 			wlr_keyboard_set_keymap(&osk->kb, km);
+			wlr_keyboard_set_repeat_info(&osk->kb, 28, 480); /* ~28/s after 480ms */
 			xkb_keymap_unref(km);
 			osk->kb_ready = true;
 		}
@@ -626,6 +651,9 @@ ng_osk_set_visible(struct ng_osk *osk, bool visible)
 {
 	if (!osk || osk->visible == visible)
 		return;
+	if (osk->held_code)
+		osk_key_up(osk);
+	osk->pressed = NULL;
 	osk->visible = visible;
 	if (visible) {
 		osk->shift = false;
@@ -649,8 +677,24 @@ ng_osk_top(struct ng_osk *osk)
 	return osk->area.y;
 }
 
+static struct key *
+key_at(struct ng_osk *osk, double lx, double ly)
+{
+	if (lx < osk->area.x || lx >= osk->area.x + osk->area.width || ly < osk->area.y ||
+	    ly >= osk->area.y + osk->area.height)
+		return NULL;
+	struct key(*L)[ROWMAX] = cur_rows(osk);
+	for (int r = 0; r < cur_nrows(osk); r++)
+		for (struct key *k = L[r]; k->lbl; k++) {
+			struct wlr_box b = k->box;
+			if (lx >= b.x && lx < b.x + b.width && ly >= b.y && ly < b.y + b.height)
+				return k;
+		}
+	return NULL;
+}
+
 bool
-ng_osk_tap(struct ng_osk *osk, double lx, double ly)
+ng_osk_press(struct ng_osk *osk, double lx, double ly)
 {
 	if (!osk || !osk->visible)
 		return false;
@@ -658,66 +702,79 @@ ng_osk_tap(struct ng_osk *osk, double lx, double ly)
 	    ly >= osk->area.y + osk->area.height)
 		return false;
 
-	struct key(*L)[ROWMAX] = cur_rows(osk);
-	int rows = cur_nrows(osk);
-	for (int r = 0; r < rows; r++) {
-		for (struct key *k = L[r]; k->lbl; k++) {
-			struct wlr_box b = k->box;
-			if (lx < b.x || lx >= b.x + b.width || ly < b.y || ly >= b.y + b.height)
-				continue;
-			switch (k->kind) {
-			case KK_CHAR: {
-				bool sh = k->shift || (osk->layer == LY_EN && osk->shift);
-				osk_send(osk, k->code, sh, k->group);
-				if (osk->shift && osk->layer == LY_EN) {
-					osk->shift = false;
-					osk_render(osk);
-				}
-				break;
-			}
-			case KK_SHIFT:
-				osk->shift = !osk->shift;
-				osk_render(osk);
-				break;
-			case KK_SYM:
-				osk->layer = LY_SYM;
-				osk->shift = false;
-				osk_render(osk);
-				break;
-			case KK_SYM2:
-				osk->layer = LY_SYM2;
-				osk->shift = false;
-				osk_render(osk);
-				break;
-			case KK_ABC:
-				osk->layer = osk->letter;
-				osk_render(osk);
-				break;
-			case KK_LANG:
-				osk->letter = (osk->letter == LY_EN) ? LY_RU : LY_EN;
-				osk->layer = osk->letter;
-				osk->shift = false;
-				osk_render(osk);
-				break;
-			case KK_EMOJI:
-				osk->layer = LY_EMOJI;
-				osk_render(osk);
-				break;
-			case KK_BKSP:
-				osk_send(osk, KEY_BACKSPACE, false, 0);
-				break;
-			case KK_ENTER:
-				osk_send(osk, KEY_ENTER, false, 0);
-				break;
-			case KK_SPACE:
-				osk_send(osk, KEY_SPACE, false, 0);
-				break;
-			case KK_HIDE:
-				ng_osk_set_visible(osk, false);
-				break;
-			}
-			return true;
-		}
+	struct key *k = key_at(osk, lx, ly);
+	if (!k)
+		return true; /* inside the panel, between keys */
+
+	osk->pressed = k;
+	switch (k->kind) {
+	case KK_CHAR: {
+		bool sh = k->shift || (osk->layer == LY_EN && osk->shift);
+		osk_key_down(osk, k->code, sh, k->group); /* held -> client repeats */
+		break;
 	}
+	case KK_BKSP:
+		osk_key_down(osk, KEY_BACKSPACE, false, 0);
+		break;
+	case KK_SPACE:
+		osk_key_down(osk, KEY_SPACE, false, 0);
+		break;
+	case KK_ENTER:
+		osk_send(osk, KEY_ENTER, false, 0); /* discrete - no repeat on return */
+		break;
+	case KK_SHIFT:
+		osk->shift = !osk->shift;
+		break;
+	case KK_SYM:
+		osk->layer = LY_SYM;
+		osk->shift = false;
+		break;
+	case KK_SYM2:
+		osk->layer = LY_SYM2;
+		osk->shift = false;
+		break;
+	case KK_ABC:
+		osk->layer = osk->letter;
+		break;
+	case KK_LANG:
+		osk->letter = (osk->letter == LY_EN) ? LY_RU : LY_EN;
+		osk->layer = osk->letter;
+		osk->shift = false;
+		break;
+	case KK_EMOJI:
+		osk->layer = LY_EMOJI;
+		break;
+	case KK_HIDE:
+		break; /* acts on release */
+	}
+	osk_render(osk);
+	return true;
+}
+
+void
+ng_osk_release(struct ng_osk *osk)
+{
+	if (!osk)
+		return;
+	struct key *k = osk->pressed;
+	osk->pressed = NULL;
+	osk_key_up(osk);
+
+	if (k && k->kind == KK_CHAR && osk->shift && osk->layer == LY_EN)
+		osk->shift = false; /* one-shot shift consumed */
+	if (k && k->kind == KK_HIDE) {
+		ng_osk_set_visible(osk, false);
+		return;
+	}
+	if (osk->visible)
+		osk_render(osk);
+}
+
+bool
+ng_osk_tap(struct ng_osk *osk, double lx, double ly)
+{
+	if (!ng_osk_press(osk, lx, ly))
+		return false;
+	ng_osk_release(osk);
 	return true;
 }

@@ -99,6 +99,12 @@ handle_line(struct ng_ipc *ipc, char *line)
 			double x = 0, y = 0;
 			if (sscanf(arg + 4, "%lf %lf", &x, &y) == 2)
 				ng_osk_tap(osk, x, y);
+		} else if (osk && arg && strncmp(arg, "press ", 6) == 0) {
+			double x = 0, y = 0;
+			if (sscanf(arg + 6, "%lf %lf", &x, &y) == 2)
+				ng_osk_press(osk, x, y);
+		} else if (osk && arg && strcmp(arg, "release") == 0) {
+			ng_osk_release(osk);
 		} else if (osk) {
 			if (arg && strcmp(arg, "toggle") == 0)
 				ng_osk_set_visible(osk, !ng_osk_is_visible(osk));

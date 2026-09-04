@@ -100,8 +100,9 @@ osk_handle_press(struct cg_seat *seat, double lx, double ly)
 		return false;
 
 	if (ng_osk_is_visible(server->osk)) {
-		if (ng_osk_tap(server->osk, lx, ly)) {
-			view_position_all(server); /* the hide key may have resized the client */
+		if (ng_osk_press(server->osk, lx, ly)) {
+			seat->osk_grab = true;
+			view_position_all(server); /* the hide key may resize the client */
 			wlr_idle_notifier_v1_notify_activity(server->idle, seat->seat);
 			return true;
 		}
@@ -116,6 +117,20 @@ osk_handle_press(struct cg_seat *seat, double lx, double ly)
 		wlr_idle_notifier_v1_notify_activity(server->idle, seat->seat);
 	}
 	return false;
+}
+
+/* release the finger/click that ng_osk_press grabbed */
+static bool
+osk_handle_release(struct cg_seat *seat)
+{
+	if (!seat->osk_grab)
+		return false;
+	seat->osk_grab = false;
+	if (seat->server->osk) {
+		ng_osk_release(seat->server->osk);
+		view_position_all(seat->server);
+	}
+	return true;
 }
 
 static void
@@ -584,6 +599,12 @@ handle_touch_up(struct wl_listener *listener, void *data)
 	struct cg_seat *seat = wl_container_of(listener, seat, touch_up);
 	struct wlr_touch_up_event *event = data;
 
+	if (osk_handle_release(seat)) {
+		wlr_seat_touch_notify_up(seat->seat, event->time_msec, event->touch_id);
+		wlr_idle_notifier_v1_notify_activity(seat->server->idle, seat->seat);
+		return;
+	}
+
 	if (!wlr_seat_touch_get_point(seat->seat, event->touch_id)) {
 		return;
 	}
@@ -684,6 +705,11 @@ handle_cursor_button(struct wl_listener *listener, void *data)
 		}
 		if (osk_handle_press(seat, seat->cursor->x, seat->cursor->y))
 			return;
+	}
+
+	if ((uint32_t) event->state == WLR_BUTTON_RELEASED && osk_handle_release(seat)) {
+		wlr_idle_notifier_v1_notify_activity(seat->server->idle, seat->seat);
+		return;
 	}
 
 	wlr_seat_pointer_notify_button(seat->seat, event->time_msec, event->button, event->state);

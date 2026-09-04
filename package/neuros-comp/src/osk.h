@@ -26,6 +26,12 @@ bool ng_osk_is_visible(struct ng_osk *osk);
 /* Layout coords. Returns true if the tap landed on the keyboard (consume it). */
 bool ng_osk_tap(struct ng_osk *osk, double lx, double ly);
 
+/* Press/release for hold-to-repeat + a pressed-key highlight. ng_osk_press
+ * returns true if it hit the keyboard (the caller then routes the matching
+ * release to ng_osk_release and consumes both). */
+bool ng_osk_press(struct ng_osk *osk, double lx, double ly);
+void ng_osk_release(struct ng_osk *osk);
+
 /* Y of the keyboard's top edge when visible (screen coords), or `h` when
  * hidden - the shell shrinks the client above this. */
 int ng_osk_top(struct ng_osk *osk);

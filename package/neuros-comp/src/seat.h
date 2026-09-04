@@ -26,6 +26,7 @@ struct cg_seat {
 	struct wl_listener new_input;
 
 	struct wlr_keyboard *osk_keyboard; /* synthetic kb behind the on-screen keyboard */
+	bool osk_grab;                     /* the current press was consumed by the OSK */
 
 	struct wlr_cursor *cursor;
 	struct wlr_xcursor_manager *xcursor_manager;
