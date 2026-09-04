@@ -298,6 +298,25 @@ minimal Android property/HAL container (for camera). Packaged in this BR2_EXTERN
 - **AVB**: disable verification **permanently** (patch/empty `vbmeta`). No own
   key, no signing, no re-lock - user does not want to re-lock the bootloader.
 
+## Resolved (2026-09-04, batch 5)
+
+- **Big display font**: **FIGlet `slant`** (Glenn Chappell), not Doto - user's
+  call. `figtext_render()` = `flf_render_string` (kerning + Standard smushing,
+  already in `figlet.c`) rasterised in JetBrains Mono Bold + 1px embolden, scaled
+  to 93% of the pane. Panes grew (17.5% -> 20.5% h) to fit the 6-row grid. Doto
+  TTF still bundled but unused. `neuros-slant.flf` vendored (standard FIGfont
+  licence). Lock clock uses the same path.
+- **foot palette**: full 16-colour ANSI = kitty's defaults (foot only had 0/7,
+  washing out the agent TUI's colours). kitty-the-terminal still rejected (GL).
+- **agent status + TTS for Claude Code v2**: the `pipe-pane` stream is unusable
+  (CC v2 is a redraw-in-place TUI, no newline stream). Now:
+  - status: poll `tmux capture-pane` 1/s, classify the whole pane
+    (`esc to interrupt` -> Working/Thinking, prompt -> Waiting, else Idle).
+  - TTS: Claude Code **Stop hook** (`neuros-agent-hook`) reads the transcript
+    with **jq** -> `/run/neuros/reply.txt` (shared 1777 dir, agent is non-root),
+    waiting for the last message to flush. agentd speaks it on Working->Idle.
+- **`/run/neuros`** (1777) is the root<->agent-user shared runtime dir.
+
 ## Resolved (2026-09-04, batch 4)
 
 - **Non-root agent user** (`board/neuros/x86_64/users.table`): the agent CLI runs
@@ -329,9 +348,8 @@ minimal Android property/HAL container (for camera). Packaged in this BR2_EXTERN
 - Lockscreen: promote the compositor overlay to real `ext-session-lock-v1`
   (`wlr_session_lock_v1`) so it's an actual security boundary, not just visual.
 - Camera pane (centre-panel camera mode + `neuros-camera` action).
-- agent-status classifier for Claude Code v2 output (status stayed "Idle" with
-  real CC - the line patterns in `agent-status` target the mock / older TUI;
-  switch to polling `tmux capture-pane` for `esc to interrupt`).
+- Live-mic capture link end to end (no mic in the headless VM - only the
+  whisper+VAD half is verified).
 - Pick the exact newest-stable HyperOS fastboot ROM build for sweet.
 - Claw'd mascot: rights request sent to Anthropic (pending).
 
