@@ -365,11 +365,12 @@ ng_shell_layout(struct ng_shell *shell, int width, int height)
 		margin = 6;
 	int gap = margin;
 
-	shell->frame_t = height / 80;
-	if (shell->frame_t < 6)
-		shell->frame_t = 6;
-	if (shell->frame_t > 26)
-		shell->frame_t = 26;
+	/* glass panels: a hairline border, not a thick frame */
+	shell->frame_t = height / 600;
+	if (shell->frame_t < 1)
+		shell->frame_t = 1;
+	if (shell->frame_t > 3)
+		shell->frame_t = 3;
 
 	int strip_h = height * 4 / 100;
 	if (strip_h < 22)
