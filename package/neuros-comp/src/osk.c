@@ -271,6 +271,8 @@ struct ng_osk {
 	enum layer layer;
 	enum layer letter; /* LY_EN or LY_RU - what ?123 / emoji return to */
 	bool shift;
+	bool caps;         /* caps-lock: shift stays on (double-tap shift) */
+	uint32_t last_shift;
 	bool visible;
 
 	/* press/hold state */
@@ -548,7 +550,7 @@ osk_render(struct ng_osk *osk)
 				lbl = up;
 			}
 			if (k->kind == KK_SHIFT)
-				lbl = osk->shift ? "SHIFT" : "shift";
+				lbl = osk->caps ? "CAPS" : osk->shift ? "SHIFT" : "shift";
 			else if (k->kind == KK_LANG)
 				lbl = (osk->layer == LY_RU) ? "RU" : "EN";
 			else if (k->kind == KK_EMOJI)
@@ -656,7 +658,7 @@ ng_osk_set_visible(struct ng_osk *osk, bool visible)
 	osk->pressed = NULL;
 	osk->visible = visible;
 	if (visible) {
-		osk->shift = false;
+		osk->shift = osk->caps = false;
 		wlr_scene_node_raise_to_top(&osk->tree->node);
 		osk_render(osk);
 	}
@@ -722,9 +724,18 @@ ng_osk_press(struct ng_osk *osk, double lx, double ly)
 	case KK_ENTER:
 		osk_send(osk, KEY_ENTER, false, 0); /* discrete - no repeat on return */
 		break;
-	case KK_SHIFT:
-		osk->shift = !osk->shift;
+	case KK_SHIFT: {
+		uint32_t t = now_ms();
+		if (osk->caps) {
+			osk->caps = osk->shift = false;
+		} else if (t - osk->last_shift < 400) {
+			osk->caps = osk->shift = true; /* double-tap -> caps lock */
+		} else {
+			osk->shift = !osk->shift;
+		}
+		osk->last_shift = t;
 		break;
+	}
 	case KK_SYM:
 		osk->layer = LY_SYM;
 		osk->shift = false;
@@ -760,7 +771,7 @@ ng_osk_release(struct ng_osk *osk)
 	osk->pressed = NULL;
 	osk_key_up(osk);
 
-	if (k && k->kind == KK_CHAR && osk->shift && osk->layer == LY_EN)
+	if (k && k->kind == KK_CHAR && osk->shift && !osk->caps && osk->layer == LY_EN)
 		osk->shift = false; /* one-shot shift consumed */
 	if (k && k->kind == KK_HIDE) {
 		ng_osk_set_visible(osk, false);
