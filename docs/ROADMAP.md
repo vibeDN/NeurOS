@@ -456,3 +456,26 @@ whisper.cpp multilingual GGML - disk / peak RAM / real-time factor:
 Vosk (Kaldi, streaming, per language): small ru/en ~40-50 MB disk, 250-500 MB
 RAM, very light CPU (used here only as VAD). Large models not on device.
 Piper TTS: ~20-65 MB/voice, ~50-150 MB RAM, faster than realtime.
+
+## Resolved (2026-09-04, batch 8)
+
+- **Hardware side keys** (`seat.c` intercepts evdev 116/115/114 - power / vol
+  up / vol down; short vs long >=550ms; Power+VolUp combo):
+  | key | short | long |
+  |-----|-------|------|
+  | Power | `neuros-screen toggle` (off also locks) | compositor power menu |
+  | Vol ± | `neuros-vol up/down` (amixer) | `neuros-tts toggle` |
+  | Power+Vol+ (hold) | - | `neuros-ws toggle` (2nd tmux window = fish) |
+  - power menu: `ng_shell_power_menu` scrim + Power off / Restart / Cancel pills.
+  - `output_set_power()` DPMS; ipc `screen on|off|toggle`, `power [hide]`.
+  - `/run/neuros/tts-off` flag - agentd `speak()` honours it.
+- **Big-font clip fix**: `ng_text_render` now pads the buffer vertically
+  (line_h/3) - `/ \ { _` glyphs overshoot ascent/descent and were clipped
+  (lockscreen clock lost its top/bottom strokes).
+- **Lockscreen Cancel** is a real pill button below the keypad (was bare text
+  overlapping the `0` key).
+
+### Still open (buttons / phone)
+- The above is x86-VM verified via VirtualBox sending the keycodes. On the
+  phone the power/vol keys come through the downstream kernel's gpio-keys -
+  confirm the evdev codes match at M6.
