@@ -272,8 +272,8 @@ minimal Android property/HAL container (for camera). Packaged in this BR2_EXTERN
 - **HyperOS blob source**: newest stable global build (not the 2024 one).
 - **Halium-style**: confirmed - chosen for hardware completeness/stability
   (camera is core; mainline sm6150 camera isn't there).
-- **AVB**: disable verification for dev (patch/empty `vbmeta`); signing with our
-  own key + re-locking is a later hardening step, not now.
+- **AVB**: disable verification **permanently** (patch/empty `vbmeta`). No own
+  key, no signing, no re-lock - user does not want to re-lock the bootloader.
 
 ## Still open
 - **Big-font look** - user is doing the real design in Claude Design; will send a
