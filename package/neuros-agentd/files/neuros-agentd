@@ -81,11 +81,21 @@ tail -n0 -F "$RAW" 2>/dev/null | while IFS= read -r line; do
 		BUF="$BUF$clean "
 	fi
 
+	# activity sub-line: a tool call in the raw output -> "using <tool>"
+	case "$line" in
+	*"Bash("*)   neuros-ctl activity "using bash" 2>/dev/null || true ;;
+	*"Edit("* | *"Update("* | *"Write("*) neuros-ctl activity "editing files" 2>/dev/null || true ;;
+	*"Read("*)   neuros-ctl activity "reading files" 2>/dev/null || true ;;
+	*"Grep("* | *"Glob("* | *"Search("*) neuros-ctl activity "searching" 2>/dev/null || true ;;
+	*"WebFetch"* | *"WebSearch"*) neuros-ctl activity "on the web" 2>/dev/null || true ;;
+	esac
+
 	st=$(printf '%s\n' "$line" | /usr/lib/neuros/agent-status)
 	if [ -n "$st" ]; then
 		neuros-ctl status "$st" 2>/dev/null || true
 		case "$st" in
 		Idle | Waiting)
+			neuros-ctl activity "" 2>/dev/null || true
 			trimmed=$(printf '%s' "$BUF" | sed -E 's/^ +//; s/ +$//')
 			if [ -n "$trimmed" ] && [ "$trimmed" != "$LASTSPEAK" ]; then
 				speak "$trimmed" &

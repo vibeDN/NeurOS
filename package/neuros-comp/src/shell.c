@@ -192,6 +192,7 @@ ng_shell_create(struct cg_server *server)
 	if (!shell->strip_font)
 		wlr_log(WLR_ERROR, "ng_shell: no monospace font (strip text disabled)");
 	shell->strip_node = wlr_scene_buffer_create(shell->tree, NULL);
+	shell->activity_node = wlr_scene_buffer_create(shell->tree, NULL);
 
 	ng_shell_set_colors(shell, DEFAULT_TOP, DEFAULT_BOTTOM);
 
@@ -209,6 +210,7 @@ ng_shell_destroy(struct ng_shell *shell)
 	free(shell->agent.text);
 	free(shell->status.text);
 	free(shell->strip_text);
+	free(shell->activity_text);
 	if (shell->strip_font)
 		fcft_destroy(shell->strip_font);
 	if (shell->font)
@@ -276,6 +278,38 @@ ng_shell_set_strip(struct ng_shell *shell, const char *text)
 	strip_reposition(shell);
 }
 
+/* centre the activity sub-line horizontally, just below the bottom pane's box */
+static void
+activity_reposition(struct ng_shell *shell)
+{
+	if (!shell->activity_node || !shell->activity_node->buffer)
+		return;
+	int bw = shell->activity_node->buffer->width;
+	int bh = shell->activity_node->buffer->height;
+	int x = shell->bottom_box.x + (shell->bottom_box.width - bw) / 2;
+	int y = shell->bottom_box.y + shell->bottom_box.height - bh - NG_FRAME_PX - 4;
+	wlr_scene_node_set_position(&shell->activity_node->node, x, y);
+}
+
+void
+ng_shell_set_activity(struct ng_shell *shell, const char *text)
+{
+	free(shell->activity_text);
+	shell->activity_text = text ? strdup(text) : NULL;
+
+	if (!shell->activity_node)
+		return;
+	if (!shell->strip_font || !shell->activity_text || !shell->activity_text[0]) {
+		wlr_scene_buffer_set_buffer(shell->activity_node, NULL);
+		return;
+	}
+	struct wlr_buffer *buf = ng_text_render(shell->strip_font, shell->activity_text, STRIP_COLOR, NULL, NULL);
+	wlr_scene_buffer_set_buffer(shell->activity_node, buf);
+	if (buf)
+		wlr_buffer_drop(buf);
+	activity_reposition(shell);
+}
+
 void
 ng_shell_layout(struct ng_shell *shell, int width, int height)
 {
@@ -327,6 +361,7 @@ ng_shell_layout(struct ng_shell *shell, int width, int height)
 	textblock_render(&shell->agent, shell->font, &shell->top_box);
 	textblock_render(&shell->status, shell->font, &shell->bottom_box);
 	strip_reposition(shell);
+	activity_reposition(shell);
 
 	wlr_log(WLR_INFO, "ng_shell: layout %dx%d, centre pane %d,%d %dx%d", width, height, shell->center_box.x,
 		shell->center_box.y, shell->center_box.width, shell->center_box.height);
