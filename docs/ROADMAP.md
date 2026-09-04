@@ -298,6 +298,19 @@ minimal Android property/HAL container (for camera). Packaged in this BR2_EXTERN
 - **AVB**: disable verification **permanently** (patch/empty `vbmeta`). No own
   key, no signing, no re-lock - user does not want to re-lock the bootloader.
 
+## Resolved (2026-09-04, batch 7)
+
+- **On-screen keyboard** (`osk.c`, built into the compositor): the phone has no
+  hardware keyboard, so without this you can't type to the agent. Glass QWERTY at
+  the screen bottom (34% portrait / 44% landscape), 2 layers (letters + `?123`
+  symbols), one-shot shift, space/del/ret/hide. One pixman buffer, hit-tested per
+  key. A **synthetic `wlr_keyboard`** (US keymap) is registered on the seat at
+  startup so clients bind `wl_keyboard` + get a keymap even with no physical
+  device; taps -> `wlr_keyboard_notify_key` + `wlr_seat_keyboard_notify_key` +
+  `_notify_modifiers`. A tap on the client raises it; `hide` dismisses; the
+  client shrinks above it. `neuros-ctl kbd on|off|toggle`. Verified in the VM
+  (typed to Claude Code, shift/uppercase, del, ret submits).
+
 ## Resolved (2026-09-04, batch 6)
 
 - **Terminal colour**: tmux's default `TERM=screen` (8 colours) was washing out
@@ -369,6 +382,8 @@ minimal Android property/HAL container (for camera). Packaged in this BR2_EXTERN
 - Camera pane (centre-panel camera mode + `neuros-camera` action).
 - Live-mic capture link end to end (no mic in the headless VM - only the
   whisper+VAD half is verified).
+- OSK polish: predictive/repeat on hold, a real caps-lock (double-tap shift),
+  a 3rd `=\<` layer, wire a hardware button -> `neuros-ctl kbd toggle`.
 - Pick the exact newest-stable HyperOS fastboot ROM build for sweet.
 - Claw'd mascot: rights request sent to Anthropic (pending).
 
