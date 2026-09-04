@@ -30,8 +30,8 @@
 #include "server.h"
 #include "textbuf.h"
 
-enum layer { LY_EN, LY_RU, LY_SYM, LY_EMOJI };
-enum kk { KK_CHAR, KK_SHIFT, KK_SYM, KK_LANG, KK_EMOJI, KK_ABC, KK_BKSP, KK_ENTER, KK_SPACE, KK_HIDE };
+enum layer { LY_EN, LY_RU, LY_SYM, LY_SYM2, LY_EMOJI };
+enum kk { KK_CHAR, KK_SHIFT, KK_SYM, KK_SYM2, KK_LANG, KK_EMOJI, KK_ABC, KK_BKSP, KK_ENTER, KK_SPACE, KK_HIDE };
 
 struct key {
 	const char *lbl;     /* display (UTF-8) */
@@ -136,6 +136,14 @@ build_keymap(void)
 		p += snprintf(p, end - p, "  override key <%s> { [ %s ], [ %s ], [ U%04X ] };\n", AE_XK[i], d, d,
 			      EMOJI[e++]);
 	}
+	/* extra symbols on the F-keys, group 3 (the #+= layer reaches these) */
+	static const char *FK_XK[] = {"FK01", "FK02", "FK03", "FK04", "FK05",
+				      "FK06", "FK07", "FK08", "FK09", "FK10"};
+	static const char *FK_SYM[] = {"EuroSign", "sterling",   "yen",      "periodcentered", "section",
+				       "degree",   "multiply",   "division", "U2022",          "U2026"};
+	for (int i = 0; i < 10; i++)
+		p += snprintf(p, end - p, "  override key <%s> { [ NoSymbol ], [ NoSymbol ], [ %s ] };\n", FK_XK[i],
+			      FK_SYM[i]);
 	p += snprintf(p, end - p, "};\n};\n");
 	return s;
 }
@@ -152,7 +160,9 @@ build_keymap(void)
 #define SPACE {"space", KK_SPACE, 0, 0, false, 4.0f, {0}}
 #define HIDE {"v", KK_HIDE, 0, 0, false, 1.0f, {0}}
 #define SYMK {"?123", KK_SYM, 0, 0, false, 1.5f, {0}}
+#define SYM2K {"#+=", KK_SYM2, 0, 0, false, 1.5f, {0}}
 #define ABCK {"ABC", KK_ABC, 0, 0, false, 1.5f, {0}}
+#define KE(l, c) {(l), KK_CHAR, (c), 2, false, 1.0f, {0}} /* group 2 special (F-keys) */
 #define LANGK {"글", KK_LANG, 0, 0, false, 1.2f, {0}}
 #define EMOK {"^_^", KK_EMOJI, 0, 0, false, 1.2f, {0}}
 #define END {0}
@@ -181,12 +191,23 @@ static struct key g_ru[4][ROWMAX] = {
 static struct key g_sym[4][ROWMAX] = {
 	{K0("1", KEY_1), K0("2", KEY_2), K0("3", KEY_3), K0("4", KEY_4), K0("5", KEY_5), K0("6", KEY_6),
 	 K0("7", KEY_7), K0("8", KEY_8), K0("9", KEY_9), K0("0", KEY_0), END},
-	{KSH("@", KEY_2), KSH("#", KEY_3), KSH("$", KEY_4), KSH("_", KEY_MINUS), KSH("&", KEY_7), K0("-", KEY_MINUS),
-	 KSH("+", KEY_EQUAL), KSH("(", KEY_9), KSH(")", KEY_0), K0("/", KEY_SLASH), END},
-	{KSH("*", KEY_8), KSH("\"", KEY_APOSTROPHE), K0("'", KEY_APOSTROPHE), KSH(":", KEY_SEMICOLON),
-	 K0(";", KEY_SEMICOLON), KSH("!", KEY_1), KSH("?", KEY_SLASH), K0("\\", KEY_BACKSLASH),
-	 KSH("=", KEY_EQUAL), BKSP, END},
-	{ABCK, LANGK, EMOK, SPACE, K0(",", KEY_COMMA), K0(".", KEY_DOT), ENTER, HIDE, END},
+	{KSH("@", KEY_2), KSH("#", KEY_3), KSH("$", KEY_4), KSH("&", KEY_7), K0("-", KEY_MINUS), KSH("+", KEY_EQUAL),
+	 KSH("(", KEY_9), KSH(")", KEY_0), K0("/", KEY_SLASH), KSH("*", KEY_8), END},
+	{SYM2K, KSH("\"", KEY_APOSTROPHE), K0("'", KEY_APOSTROPHE), KSH(":", KEY_SEMICOLON), K0(";", KEY_SEMICOLON),
+	 KSH("!", KEY_1), KSH("?", KEY_SLASH), K0(".", KEY_DOT), K0(",", KEY_COMMA), BKSP, END},
+	{ABCK, LANGK, EMOK, SPACE, ENTER, HIDE, END},
+};
+
+static struct key g_sym2[4][ROWMAX] = {
+	{K0("[", KEY_LEFTBRACE), K0("]", KEY_RIGHTBRACE), KSH("{", KEY_LEFTBRACE), KSH("}", KEY_RIGHTBRACE),
+	 KSH("#", KEY_3), KSH("%", KEY_5), KSH("^", KEY_6), KSH("*", KEY_8), KSH("+", KEY_EQUAL), K0("=", KEY_EQUAL),
+	 END},
+	{KSH("_", KEY_MINUS), K0("\\", KEY_BACKSLASH), KSH("|", KEY_BACKSLASH), KSH("~", KEY_GRAVE),
+	 KSH("<", KEY_COMMA), KSH(">", KEY_DOT), KE("€", KEY_F1), KE("£", KEY_F2), KE("¥", KEY_F3), KE("•", KEY_F9),
+	 END},
+	{SYMK, KE("§", KEY_F5), KE("°", KEY_F6), KE("·", KEY_F4), KE("×", KEY_F7), KE("÷", KEY_F8), KE("…", KEY_F10),
+	 K0("`", KEY_GRAVE), K0("/", KEY_SLASH), BKSP, END},
+	{ABCK, LANGK, EMOK, SPACE, ENTER, HIDE, END},
 };
 
 /* emoji grid: 42 emoji over the same 42 keycodes as the keymap (group 2) */
@@ -269,6 +290,8 @@ static struct key (*cur_rows(struct ng_osk *osk))[ROWMAX]
 		return g_ru;
 	case LY_SYM:
 		return g_sym;
+	case LY_SYM2:
+		return g_sym2;
 	case LY_EMOJI:
 		return g_emoji;
 	default:
@@ -465,6 +488,11 @@ osk_render(struct ng_osk *osk)
 	int pad = H / 44;
 	int gap = H / 100;
 	int rowh = (H - 2 * pad - (rows - 1) * gap) / rows;
+	int krad = rowh / 8; /* subtle rounded-rect, not a pill */
+	if (krad < 4)
+		krad = 4;
+	if (krad > 12)
+		krad = 12;
 	struct fcft_font *font = osk_font(rowh);
 
 	struct key(*L)[ROWMAX] = cur_rows(osk);
@@ -484,7 +512,7 @@ osk_render(struct ng_osk *osk)
 			struct wlr_box local = {(int) x, y, kw, rowh};
 
 			bool hot = (k->kind == KK_SHIFT && osk->shift) || (k->kind == KK_LANG && osk->layer == LY_RU);
-			fill_rr(data, W, H, local, rowh / 5, hot ? 0.30f : 0.13f);
+			fill_rr(data, W, H, local, krad, hot ? 0.30f : 0.13f);
 
 			const char *lbl = k->lbl;
 			char up[8];
@@ -652,6 +680,11 @@ ng_osk_tap(struct ng_osk *osk, double lx, double ly)
 				break;
 			case KK_SYM:
 				osk->layer = LY_SYM;
+				osk->shift = false;
+				osk_render(osk);
+				break;
+			case KK_SYM2:
+				osk->layer = LY_SYM2;
 				osk->shift = false;
 				osk_render(osk);
 				break;
