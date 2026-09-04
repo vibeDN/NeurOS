@@ -300,6 +300,15 @@ minimal Android property/HAL container (for camera). Packaged in this BR2_EXTERN
 
 ## Resolved (2026-09-04, batch 7)
 
+- **Display font**: **Big** (Glenn Chappell FIGlet) replaced slant - slant was
+  too thin/italic to read at panel size. `neuros-big.flf`, `NG_FIG_PATH`.
+- **Lockscreen = 6-digit passcode** (iOS-style): clock view -> tap -> "Enter
+  Passcode" + 6 dots + round 3x4 keypad + Cancel. Checked against
+  `/etc/neuros/passcode` (default `000000`, set via `neuros-lock setpin`). Wrong
+  code flashes + clears. (Superseded the "tap the lock, no PIN" note.) Still a
+  compositor overlay, not `ext-session-lock-v1` yet.
+- **Screenshots**: default to the phone VM (`make vm-phone`, 1080x2400) - that's
+  the primary form factor.
 - **Camera mode** (`ng_shell_set_camera`, compositor overlay): scrim + rounded
   viewfinder placeholder + close (X) + shutter ring, per the design HTML. `ipc
   camera on|off|toggle`; the centre-panel `[camera]` button opens it. `neuros-
