@@ -201,8 +201,10 @@ minimal Android property/HAL container (for camera). Packaged in this BR2_EXTERN
   bottom "using <tool>" activity sub-line (`neuros-ctl activity`, agentd maps
   Bash/Edit/Read/Grep/Web -> a phrase, cleared on Idle). Verified in the VM -
   the shell now matches the mockup on all zones.
-  Deferred: right-align the battery; nudge the activity line off the FIGlet
-  descenders; lockscreen (`ext-session-lock-v1`); erofs + overlay-/etc on x86.
+  Battery is right-aligned (`neuros-ctl strip_right`). The "using <tool>" line
+  still grazes the status word's descenders by ~2px - cosmetic, left as-is
+  (tried narrowing the FIGlet / taller panes, both made overflow worse).
+  Deferred: lockscreen (`ext-session-lock-v1`); erofs + overlay-/etc on x86.
 - [ ] **M2 - UI shell**: the static 4-zone shell (see "UI shell (v0)") - thin
   time/date/battery strip, top agent/model pane, center pane, bottom state pane;
   `.flf` parser + GLES glyph atlas for the FIGlet panes; embedded VT in the
