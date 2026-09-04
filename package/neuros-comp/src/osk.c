@@ -641,8 +641,19 @@ ng_osk_layout(struct ng_osk *osk, int w, int h)
 		return;
 	osk->w = w;
 	osk->h = h;
-	int kbh = h > w ? h * 36 / 100 : h * 46 / 100;
 	int margin = w / 40;
+	/* size the keyboard from the key size, not a flat % of the screen - on a
+	 * tall phone a flat 36% gave ~2:1 portrait keys. Aim for keys a touch
+	 * wider than tall (~11 columns across the usable width). */
+	int rows = 4; /* letters/space; emoji layer (5) just packs a bit tighter */
+	int keyw = (w - 2 * margin) / 11;
+	int rowh = keyw * 6 / 5;
+	int gap = h / 100;
+	int pad = h / 44;
+	int kbh = rows * rowh + (rows - 1) * gap + 2 * pad + margin;
+	int maxh = (h > w ? h * 42 : h * 52) / 100;
+	if (kbh > maxh)
+		kbh = maxh;
 	osk->area = (struct wlr_box){margin, h - kbh, w - 2 * margin, kbh - margin};
 	wlr_scene_node_raise_to_top(&osk->tree->node);
 	osk_render(osk);
