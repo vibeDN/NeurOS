@@ -49,8 +49,4 @@ void flf_render_free(struct flf_render *r);
  * non-ink cells becomes ink. Turns outline .flf art into solid block letters. */
 void flf_fill(struct flf_render *r);
 
-/* Thicken every ink cell by `n` (4-connectivity dilation). Bolds the strokes
- * without fully filling the letters. */
-void flf_dilate(struct flf_render *r, int n);
-
 #endif

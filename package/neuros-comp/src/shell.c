@@ -89,9 +89,7 @@ bigtext_render(struct ng_shell *shell, struct wlr_scene_buffer *node, const char
 		wlr_scene_buffer_set_buffer(node, NULL);
 		return;
 	}
-	/* banner .flf glyphs are already blocky - drawn as solid cells they read as
-	 * bold block letters. flf_fill()/flf_dilate() are available for tuning once
-	 * the final font is picked (Standard needs neither - it just blobs). */
+	flf_fill(r);
 
 	/* cell px: fit the grid into ~84% of the box */
 	int cw = box->width * 84 / 100 / r->cols;
