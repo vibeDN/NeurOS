@@ -41,10 +41,11 @@
    modem / dsp / persist partitions untouched (blobs load from there). New:
    `boot_a/b`, `vbmeta_a/b`, `neuros_a/b` (erofs root, ~2 GB each), `data`
    (f2fs, remaining space, shared across slots).
-5. **Verity/AVB:** for dev, **disable verification** - patch the "disable verity /
-   disable verification" flags into `vbmeta` (or flash an empty vbmeta). Phone
-   shows the standard unlocked-bootloader warning at boot; that's fine. Signing
-   `boot`+`vbmeta` with our own AVB key and re-locking is a later hardening step.
+5. **Verity/AVB:** **disable verification, permanently.** Patch the "disable
+   verity / disable verification" flags into `vbmeta` (or flash an empty vbmeta).
+   Bootloader stays unlocked forever - user does not want to re-lock. So: no own
+   AVB key, no signing, no re-lock. The unlocked-bootloader boot warning stays
+   (normal for any custom ROM).
 6. **Recovery:** a fastboot-flashable known-good image + a boot-as-recovery
    ramdisk. TWRP optionally kept on the side during bring-up. *(implementer's call)*
 
