@@ -22,6 +22,10 @@ void ng_text_set_bold(int px);
  * darker translucent centre (the chat pane). Buffer is premultiplied ARGB. */
 struct wlr_buffer *ng_panel_render(int w, int h, int rad, int dark);
 
+/* Panel + an accent border and a soft outer glow of `glow` px. The returned
+ * buffer is (w+2*glow) x (h+2*glow); position the node at (box.x-glow, box.y-glow). */
+struct wlr_buffer *ng_panel_render_ex(int w, int h, int rad, int dark, const float accent[3], int glow);
+
 /* Filled rounded rect of one straight-alpha `color` (pills, home indicator). */
 struct wlr_buffer *ng_pill_render(int w, int h, int rad, const float color[4]);
 

@@ -261,6 +261,27 @@ rr_cover(float px, float py, int w, int h, int r)
 struct wlr_buffer *
 ng_panel_render(int w, int h, int rad, int dark)
 {
+	return ng_panel_render_ex(w, h, rad, dark, NULL, 0);
+}
+
+/* signed distance to a rounded rect [0,w]x[0,h] radius r: >0 inside, <0 outside */
+static float
+rr_sd(float px, float py, float w, float h, float r)
+{
+	float ox = px < r ? r - px : (px > w - r ? px - (w - r) : 0);
+	float oy = py < r ? r - py : (py > h - r ? py - (h - r) : 0);
+	float outside = sqrtf(ox * ox + oy * oy) - r;
+	if (outside > 0)
+		return -outside;
+	float ix = px < w - px ? px : w - px;
+	float iy = py < h - py ? py : h - py;
+	float inside = ix < iy ? ix : iy;
+	return inside;
+}
+
+struct wlr_buffer *
+ng_panel_render_ex(int w, int h, int rad, int dark, const float accent[3], int glow)
+{
 	if (w < 2 || h < 2)
 		return NULL;
 	if (rad > w / 2)
@@ -269,44 +290,62 @@ ng_panel_render(int w, int h, int rad, int dark)
 		rad = h / 2;
 	if (rad < 1)
 		rad = 1;
+	if (glow < 0)
+		glow = 0;
 
-	uint32_t *data = calloc((size_t) w * h, 4);
+	int W = w + 2 * glow, H = h + 2 * glow;
+	uint32_t *data = calloc((size_t) W * H, 4);
 	if (!data)
 		return NULL;
 
-	const float border = 1.6f;
-	for (int y = 0; y < h; y++) {
-		float grad = (float) y / (h > 1 ? h - 1 : 1); /* 0 top .. 1 bottom */
-		float fill_a = dark ? (0.42f - 0.06f * grad) : (0.16f - 0.12f * grad);
-		float fill_l = dark ? 0.03f : 1.0f; /* near-black vs white */
-		for (int x = 0; x < w; x++) {
-			float cov = rr_cover(x + 0.5f, y + 0.5f, w, h, rad);
-			if (cov <= 0.0f)
+	float ar = accent ? accent[0] : 1.0f;
+	float ag = accent ? accent[1] : 1.0f;
+	float ab = accent ? accent[2] : 1.0f;
+	const float border = 2.0f;
+
+	for (int y = 0; y < H; y++) {
+		float py = y - glow + 0.5f;
+		float grad = (float) (y - glow) / (h > 1 ? h - 1 : 1);
+		if (grad < 0)
+			grad = 0;
+		if (grad > 1)
+			grad = 1;
+		for (int x = 0; x < W; x++) {
+			float px = x - glow + 0.5f;
+			float sd = rr_sd(px, py, w, h, rad);
+
+			if (sd <= -1.0f) {
+				/* outside the panel: soft accent glow */
+				if (glow > 0 && -sd < glow) {
+					float t = 1.0f - (-sd) / glow;
+					float a = 0.22f * t * t;
+					data[(size_t) y * W + x] = premul(ar, ag, ab, a);
+				}
 				continue;
-
-			/* distance from the rounded edge, for border + highlight */
-			float ex = x < w / 2 ? x + 0.5f : w - (x + 0.5f);
-			float ey = y < h / 2 ? y + 0.5f : h - (y + 0.5f);
-			float edge = ex < ey ? ex : ey;
-			/* rough radial edge in corners */
-			if (x < rad && y < rad) {
-				float ddx = rad - (x + 0.5f), ddy = rad - (y + 0.5f);
-				edge = rad - sqrtf(ddx * ddx + ddy * ddy);
 			}
 
-			float a = fill_a;
-			float l = fill_l;
-			if (edge < border) {
-				a = 0.30f;
-				l = 1.0f;
-			} else if (!dark && edge < border + 1.5f && y < h / 2) {
-				a = 0.22f; /* inset top highlight */
-				l = 1.0f;
+			float l, a;
+			if (sd < border) {
+				/* accent border ring */
+				float e = sd < 0 ? 1.0f + sd : 1.0f;
+				a = 0.55f * (e < 0 ? 0 : e);
+				data[(size_t) y * W + x] = premul(ar, ag, ab, a);
+				continue;
 			}
-			data[(size_t) y * w + x] = premul(l, l, l, a * cov);
+
+			if (dark) {
+				l = 0.03f;
+				a = 0.46f - 0.08f * grad;
+			} else {
+				l = 1.0f;
+				a = 0.15f - 0.11f * grad;
+				if (sd < border + 2.5f && py < h / 2)
+					a = 0.24f; /* inset top highlight */
+			}
+			data[(size_t) y * W + x] = premul(l, l, l, a);
 		}
 	}
-	return buf_from_data(data, w, h);
+	return buf_from_data(data, W, H);
 }
 
 struct wlr_buffer *

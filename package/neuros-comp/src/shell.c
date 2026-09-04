@@ -399,12 +399,20 @@ ng_shell_layout(struct ng_shell *shell, int width, int height)
 	shell->center_box = (struct wlr_box){x, center_y, w, center_h};
 	shell->bottom_box = (struct wlr_box){x, bottom_y, w, pane_h};
 
-	node_set(shell->top_panel, ng_panel_render(shell->top_box.width, shell->top_box.height, rad, 0),
-		 shell->top_box.x, shell->top_box.y);
-	node_set(shell->center_panel, ng_panel_render(shell->center_box.width, shell->center_box.height, rad, 1),
-		 shell->center_box.x, shell->center_box.y);
-	node_set(shell->bottom_panel, ng_panel_render(shell->bottom_box.width, shell->bottom_box.height, rad, 0),
-		 shell->bottom_box.x, shell->bottom_box.y);
+	int glow = rad * 3 / 4;
+	float acc[3] = {shell->top_color[0], shell->top_color[1], shell->top_color[2]};
+	/* brighten the accent for the border/glow */
+	for (int i = 0; i < 3; i++)
+		acc[i] = acc[i] + (1.0f - acc[i]) * 0.35f;
+	node_set(shell->top_panel,
+		 ng_panel_render_ex(shell->top_box.width, shell->top_box.height, rad, 0, acc, glow),
+		 shell->top_box.x - glow, shell->top_box.y - glow);
+	node_set(shell->center_panel,
+		 ng_panel_render_ex(shell->center_box.width, shell->center_box.height, rad, 1, acc, glow),
+		 shell->center_box.x - glow, shell->center_box.y - glow);
+	node_set(shell->bottom_panel,
+		 ng_panel_render_ex(shell->bottom_box.width, shell->bottom_box.height, rad, 0, acc, glow),
+		 shell->bottom_box.x - glow, shell->bottom_box.y - glow);
 
 	/* top pane: agent name, with the model line tucked under it when set */
 	int has_model = shell->model_text && shell->model_text[0];
