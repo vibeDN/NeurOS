@@ -402,7 +402,9 @@ minimal Android property/HAL container (for camera). Packaged in this BR2_EXTERN
   dense line-art and blobs when filled). `flf_render_string` + kerning/smushing
   is solid and stays. Both `.flf` bundled; `NG_FONT_PATH` selects.
 - Lockscreen: promote the compositor overlay to real `ext-session-lock-v1`
-  (`wlr_session_lock_v1`) so it's an actual security boundary, not just visual.
+  (`wlr_session_lock_v1`). Input is now contained (keys swallowed while
+  locked, OSK hidden, taps intercepted, scrim ~0.96) - the protocol itself
+  is the remaining piece.
 - Camera **live feed** into the viewfinder (needs the phone camera HAL / a v4l2
   frame grabber -> shared buffer the compositor reloads).
 - Live-mic capture link end to end (no mic in the headless VM - only the
@@ -410,6 +412,7 @@ minimal Android property/HAL container (for camera). Packaged in this BR2_EXTERN
 - OSK polish: long-press for accented/alt chars; a globe long-press layout
   picker; wire a hardware button -> `neuros-ctl kbd toggle`. Move the
   centre-panel [camera]/[mic] buttons clear of the keyboard when it's up.
+  *(buttons-clear-of-keyboard: done, batch 9.)*
 - Pick the exact newest-stable HyperOS fastboot ROM build for sweet.
 - Claw'd mascot: rights request sent to Anthropic (pending).
 
@@ -479,3 +482,14 @@ Piper TTS: ~20-65 MB/voice, ~50-150 MB RAM, faster than realtime.
 - The above is x86-VM verified via VirtualBox sending the keycodes. On the
   phone the power/vol keys come through the downstream kernel's gpio-keys -
   confirm the evdev codes match at M6.
+
+## Resolved (2026-09-04, batch 9)
+
+- **Camera/mic overlay buttons lift above the OSK** - `ng_shell_layout`
+  clamps their y above `ng_osk_top()` when the keyboard is visible;
+  `ng_shell_refresh()` is called from seat.c / ipc.c on every OSK show/hide
+  so they track it live. (Was: hidden under the top key row.)
+- **Lock input containment** - `handle_key_event` drops all keys while
+  locked; `ng_shell_set_locked` hides the OSK. Pointer/touch already
+  contained. Not the full `wlr_session_lock_v1` yet, but no input path to
+  the client remains.
