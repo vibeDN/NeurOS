@@ -300,6 +300,13 @@ minimal Android property/HAL container (for camera). Packaged in this BR2_EXTERN
 
 ## Resolved (2026-09-04, batch 7)
 
+- **Camera mode** (`ng_shell_set_camera`, compositor overlay): scrim + rounded
+  viewfinder placeholder + close (X) + shutter ring, per the design HTML. `ipc
+  camera on|off|toggle`; the centre-panel `[camera]` button opens it. `neuros-
+  camera shot` grabs a still via fswebcam/ffmpeg when `/dev/video0` exists (x86
+  dev has none). **Live feed is deferred to the phone camera HAL (M6/M7)** - the
+  UI + shutter plumbing is in place.
+
 - **On-screen keyboard** (`osk.c`, built into the compositor): the phone has no
   hardware keyboard, so without this you can't type to the agent. Glass QWERTY at
   the screen bottom (34% portrait / 44% landscape), 2 layers (letters + `?123`
@@ -379,7 +386,8 @@ minimal Android property/HAL container (for camera). Packaged in this BR2_EXTERN
   is solid and stays. Both `.flf` bundled; `NG_FONT_PATH` selects.
 - Lockscreen: promote the compositor overlay to real `ext-session-lock-v1`
   (`wlr_session_lock_v1`) so it's an actual security boundary, not just visual.
-- Camera pane (centre-panel camera mode + `neuros-camera` action).
+- Camera **live feed** into the viewfinder (needs the phone camera HAL / a v4l2
+  frame grabber -> shared buffer the compositor reloads).
 - Live-mic capture link end to end (no mic in the headless VM - only the
   whisper+VAD half is verified).
 - OSK polish: predictive/repeat on hold, a real caps-lock (double-tap shift),
