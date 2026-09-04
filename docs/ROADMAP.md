@@ -318,9 +318,11 @@ minimal Android property/HAL container (for camera). Packaged in this BR2_EXTERN
     symbols, `#+=` brackets/currency/unicode (EUR/GBP/JPY, `[ ] { } # % ^ ~ < >`,
     `§ ° · × ÷ • …` - carried on 10 F-key keycodes in xkb group 3), and an
     **emoji grid** (42 emoji, monochrome **Noto Emoji** bundled, group 3).
-  - globe key EN↔RU, one-shot shift, space/del/ret/hide. Tap the client to
-    raise, `hide` to dismiss; the client shrinks above it. `neuros-ctl kbd
-    on|off|toggle`.
+  - globe key EN↔RU, one-shot shift, **caps-lock** (double-tap shift),
+    **hold-to-repeat** (client-side via `repeat_info`; held key lights up),
+    space/del/ret/hide. Tap the client to raise, `hide` to dismiss; the client
+    shrinks above it. `neuros-ctl kbd on|off|toggle`.
+  - foot.ini gained DejaVu + Noto Emoji fallbacks (CC's spinner/emoji were tofu).
   - Verified on the phone VM: EN, Cyrillic (`йнг`), emoji (`😀😁🚀`),
     currency (`€£×`), `[ { }` all typed into Claude Code.
 
@@ -396,8 +398,9 @@ minimal Android property/HAL container (for camera). Packaged in this BR2_EXTERN
   frame grabber -> shared buffer the compositor reloads).
 - Live-mic capture link end to end (no mic in the headless VM - only the
   whisper+VAD half is verified).
-- OSK polish: predictive/repeat on hold, a real caps-lock (double-tap shift),
-  a 3rd `=\<` layer, wire a hardware button -> `neuros-ctl kbd toggle`.
+- OSK polish: long-press for accented/alt chars; a globe long-press layout
+  picker; wire a hardware button -> `neuros-ctl kbd toggle`. Move the
+  centre-panel [camera]/[mic] buttons clear of the keyboard when it's up.
 - Pick the exact newest-stable HyperOS fastboot ROM build for sweet.
 - Claw'd mascot: rights request sent to Anthropic (pending).
 
