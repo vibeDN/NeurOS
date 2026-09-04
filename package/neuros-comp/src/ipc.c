@@ -63,6 +63,8 @@ handle_line(struct ng_ipc *ipc, char *line)
 
 	if (strcmp(line, "agent") == 0 && arg) {
 		ng_shell_set_agent(shell, arg);
+	} else if (strcmp(line, "model") == 0) {
+		ng_shell_set_model(shell, arg ? arg : "");
 	} else if (strcmp(line, "status") == 0 && arg) {
 		ng_shell_set_status(shell, arg);
 	} else if (strcmp(line, "strip") == 0) {

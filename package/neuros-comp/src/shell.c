@@ -24,7 +24,7 @@
 #include "shell.h"
 #include "textbuf.h"
 
-#define NG_BIG_FONT  "Doto:weight=210"
+#define NG_BIG_FONT  "Doto:weight=210:width=100"
 #define NG_MONO_FONT "JetBrains Mono"
 
 /* text colours are straight alpha (ng_text_render builds a pixman fill) */
