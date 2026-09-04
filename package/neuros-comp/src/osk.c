@@ -1,9 +1,10 @@
 /*
  * NeurOS on-screen keyboard. See osk.h. MIT.
  *
- * Four layouts on one synthetic keyboard: English (group 1), Russian YCUKEN
- * (group 2), symbols, and an emoji grid (group 3, Noto Emoji). The globe key
- * toggles EN<->RU; ?123 -> symbols; the smiley -> emoji.
+ * Five layouts on one synthetic keyboard: English (xkb group 1), Russian
+ * YCUKEN (group 2), ?123 symbols, a #+= brackets/currency layer, and an emoji
+ * grid. Cyrillic + emoji + EUR/GBP/JPY etc ride xkb groups 2/3 so the client
+ * resolves the real character. EN<->RU via the globe key.
  */
 #define _POSIX_C_SOURCE 200809L
 

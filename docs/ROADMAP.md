@@ -308,15 +308,21 @@ minimal Android property/HAL container (for camera). Packaged in this BR2_EXTERN
   UI + shutter plumbing is in place.
 
 - **On-screen keyboard** (`osk.c`, built into the compositor): the phone has no
-  hardware keyboard, so without this you can't type to the agent. Glass QWERTY at
-  the screen bottom (34% portrait / 44% landscape), 2 layers (letters + `?123`
-  symbols), one-shot shift, space/del/ret/hide. One pixman buffer, hit-tested per
-  key. A **synthetic `wlr_keyboard`** (US keymap) is registered on the seat at
-  startup so clients bind `wl_keyboard` + get a keymap even with no physical
-  device; taps -> `wlr_keyboard_notify_key` + `wlr_seat_keyboard_notify_key` +
-  `_notify_modifiers`. A tap on the client raises it; `hide` dismisses; the
-  client shrinks above it. `neuros-ctl kbd on|off|toggle`. Verified in the VM
-  (typed to Claude Code, shift/uppercase, del, ret submits).
+  hardware keyboard, so without this you can't type to the agent. Glass
+  rounded-rect QWERTY at the screen bottom (36% portrait), one pixman buffer,
+  hit-tested per key. A **synthetic `wlr_keyboard`** with a **generated 3-group
+  xkb keymap** is registered on the seat at startup (so clients bind
+  `wl_keyboard` even with no physical device). Taps set the xkb group via
+  `wlr_keyboard_notify_modifiers` then send the keycode.
+  - **5 layers**: EN QWERTY, **RU ЙЦУКЕН** (group 2, full Cyrillic), `?123`
+    symbols, `#+=` brackets/currency/unicode (EUR/GBP/JPY, `[ ] { } # % ^ ~ < >`,
+    `§ ° · × ÷ • …` - carried on 10 F-key keycodes in xkb group 3), and an
+    **emoji grid** (42 emoji, monochrome **Noto Emoji** bundled, group 3).
+  - globe key EN↔RU, one-shot shift, space/del/ret/hide. Tap the client to
+    raise, `hide` to dismiss; the client shrinks above it. `neuros-ctl kbd
+    on|off|toggle`.
+  - Verified on the phone VM: EN, Cyrillic (`йнг`), emoji (`😀😁🚀`),
+    currency (`€£×`), `[ { }` all typed into Claude Code.
 
 ## Resolved (2026-09-04, batch 6)
 
