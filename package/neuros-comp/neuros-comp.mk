@@ -28,6 +28,8 @@ define NEUROS_COMP_INSTALL_FONT
 		$(TARGET_DIR)/usr/share/neuros/fonts/neuros-standard.flf
 	$(INSTALL) -D -m 0644 $(BR2_EXTERNAL_NEUROS_PATH)/package/neuros-comp/fonts/neuros-banner.flf \
 		$(TARGET_DIR)/usr/share/neuros/fonts/neuros-banner.flf
+	$(INSTALL) -D -m 0644 $(BR2_EXTERNAL_NEUROS_PATH)/package/neuros-comp/fonts/neuros-slant.flf \
+		$(TARGET_DIR)/usr/share/neuros/fonts/neuros-slant.flf
 	$(INSTALL) -D -m 0644 $(BR2_EXTERNAL_NEUROS_PATH)/package/neuros-comp/fonts/ttf/Doto.ttf \
 		$(TARGET_DIR)/usr/share/fonts/neuros/Doto.ttf
 	$(INSTALL) -D -m 0644 $(BR2_EXTERNAL_NEUROS_PATH)/package/neuros-comp/fonts/ttf/JetBrainsMono.ttf \

@@ -4,9 +4,9 @@
  * iOS-style glassmorphism (Claude Design pass, docs/DESIGN-IMPL.md):
  *   strip     time/date left, battery right - JetBrains Mono, near-white
  *   dots      6-agent scaffold row (v1: only the active one lit)
- *   top panel  glass - agent name (Doto) + model pill
+ *   top panel  glass - agent name (FIGlet slant) + model pill
  *   centre     glass (dark) - the embedded client
- *   bottom     glass - status word (Doto) + "using <tool>"
+ *   bottom     glass - status word (FIGlet slant) + "using <tool>"
  *   home       a short rounded bar in the accent colour
  * Wallpaper: a per-agent vertical 2-stop gradient.
  */
@@ -27,7 +27,10 @@
 #include "shell.h"
 #include "textbuf.h"
 
-#define NG_BIG_FONT  "Doto:weight=210:width=100"
+/* big display text = FIGlet "slant" (Glenn Chappell), rasterised as ASCII art
+ * in a mono face and scaled to the pane */
+#define NG_FIG_PATH  "/usr/share/neuros/fonts/neuros-slant.flf"
+#define NG_FIG_FONT  "JetBrains Mono:weight=bold:size=18"
 #define NG_MONO_FONT "JetBrains Mono"
 
 /* text colours are straight alpha (ng_text_render builds a pixman fill) */
@@ -96,25 +99,18 @@ node_set(struct wlr_scene_buffer *node, struct wlr_buffer *buf, int x, int y)
 	wlr_scene_node_set_position(&node->node, x, y);
 }
 
-/* -- big text: the Doto display font, sized to the pane ----------------- */
+/* -- big text: FIGlet slant art, rasterised in a fixed mono face ------- */
 
+/* load the mono face used to draw the FIGlet grid (once) */
 static void
 ng_shell_size_big_font(struct ng_shell *shell, int pane_h)
 {
-	int sz = pane_h * 42 / 100;
-	if (sz < 10)
-		sz = 10;
-	if (sz > 130)
-		sz = 130;
-	if (sz == shell->big_size && shell->big_font)
-		return;
+	(void) pane_h;
 	if (shell->big_font)
-		fcft_destroy(shell->big_font);
-	char attr[48];
-	snprintf(attr, sizeof(attr), "size=%d", sz);
-	const char *names[] = {NG_BIG_FONT};
-	shell->big_font = fcft_from_name(1, names, attr);
-	shell->big_size = shell->big_font ? sz : 0;
+		return;
+	const char *names[] = {NG_FIG_FONT};
+	shell->big_font = fcft_from_name(1, names, NULL);
+	shell->big_size = shell->big_font ? 16 : 0;
 }
 
 /* safe assign - handles src aliasing *dst (ng_shell_layout re-feeds the setters) */
@@ -141,11 +137,11 @@ upper_dup(const char *s)
 	return o;
 }
 
-/* render `text` in Doto, fit to `box` (~86%), centre; anchor `cy` overrides the
- * vertical centre when >= 0 */
+/* render `text` as FIGlet slant art, scaled to `fitpct`% of `box`, centred;
+ * `cy` >= 0 overrides the vertical centre. */
 static void
-bigtext_render(struct ng_shell *shell, struct wlr_scene_buffer *node, const char *text, const struct wlr_box *box,
-	       int cy)
+figtext_render(struct ng_shell *shell, struct wlr_scene_buffer *node, const char *text, const struct wlr_box *box,
+	       int cy, int fitpct)
 {
 	if (!node)
 		return;
@@ -154,18 +150,18 @@ bigtext_render(struct ng_shell *shell, struct wlr_scene_buffer *node, const char
 		return;
 	}
 	char *up = upper_dup(text);
-	int w = 0, h = 0;
-	ng_text_set_bold(shell->big_size / 22 + 1); /* Doto looks thin at display size */
-	struct wlr_buffer *buf = ng_text_render(shell->big_font, up ? up : text, TEXT_COLOR, &w, &h);
+	char *art = shell->font ? flf_render_string(shell->font, up ? up : text) : NULL;
 	free(up);
+	int w = 0, h = 0;
+	ng_text_set_bold(1); /* extra stroke weight on the FIGlet grid */
+	struct wlr_buffer *buf = ng_text_render(shell->big_font, art ? art : text, TEXT_COLOR, &w, &h);
+	free(art);
 	if (!buf || w < 1 || h < 1) {
 		node_set(node, NULL, 0, 0);
 		return;
 	}
-	int fitw = box->width * 86 / 100, fith = box->height * 86 / 100;
+	int fitw = box->width * fitpct / 100, fith = box->height * fitpct / 100;
 	double s = (double) fitw / w < (double) fith / h ? (double) fitw / w : (double) fith / h;
-	if (s > 1.0)
-		s = 1.0;
 	int dw = (int) (w * s), dh = (int) (h * s);
 	if (dw < 1)
 		dw = 1;
@@ -177,6 +173,13 @@ bigtext_render(struct ng_shell *shell, struct wlr_scene_buffer *node, const char
 	wlr_scene_buffer_set_dest_size(node, dw, dh);
 	wlr_buffer_drop(buf);
 	wlr_scene_node_set_position(&node->node, x, y);
+}
+
+static void
+bigtext_render(struct ng_shell *shell, struct wlr_scene_buffer *node, const char *text, const struct wlr_box *box,
+	       int cy)
+{
+	figtext_render(shell, node, text, box, cy, 93);
 }
 
 /* -- small mono text (strip / model / activity) ------------------------ */
@@ -225,6 +228,11 @@ ng_shell_create(struct cg_server *server)
 	shell->strip_font = fcft_from_name(1, mono, "size=13");
 	if (!shell->strip_font)
 		wlr_log(WLR_ERROR, "ng_shell: no %s", NG_MONO_FONT);
+
+	shell->font = flf_load(NG_FIG_PATH);
+	if (!shell->font)
+		wlr_log(WLR_ERROR, "ng_shell: no FIGlet font at %s", NG_FIG_PATH);
+	ng_shell_size_big_font(shell, 0); /* load the mono face for the FIGlet grid */
 
 	shell->agent_node = wlr_scene_buffer_create(shell->tree, NULL);
 	shell->status_node = wlr_scene_buffer_create(shell->tree, NULL);
@@ -284,6 +292,8 @@ ng_shell_destroy(struct ng_shell *shell)
 		fcft_destroy(shell->strip_font);
 	if (shell->big_font)
 		fcft_destroy(shell->big_font);
+	if (shell->font)
+		flf_free(shell->font);
 	if (shell->tree)
 		wlr_scene_node_destroy(&shell->tree->node);
 	free(shell);
@@ -337,8 +347,7 @@ ng_shell_set_status(struct ng_shell *shell, const char *state)
 {
 	str_set(&shell->status_text, state);
 	struct wlr_box b = shell->bottom_box;
-	b.height = b.height * 66 / 100;
-	ng_shell_size_big_font(shell, b.height);
+	b.height = b.height * 78 / 100;
 	bigtext_render(shell, shell->status_node, shell->status_text, &b, -1);
 }
 
@@ -479,37 +488,16 @@ lock_layout(struct ng_shell *shell)
 		}
 	}
 
-	int cx = W / 2, cy = H * 35 / 100;
-	int tsz = H / 10;
-	if (tsz < 24)
-		tsz = 24;
-	if (shell->big_font && shell->big_size != tsz) {
-		fcft_destroy(shell->big_font);
-		shell->big_font = NULL;
-		shell->big_size = 0;
-	}
-	ng_shell_size_big_font(shell, tsz * 100 / 42);
-	if (shell->big_font && tm && tm[0]) {
-		char *up = upper_dup(tm);
-		int w = 0, h = 0;
-		ng_text_set_bold(shell->big_size / 26 + 1);
-		struct wlr_buffer *b = ng_text_render(shell->big_font, up ? up : tm, TEXT_COLOR, &w, &h);
-		free(up);
-		if (b) {
-			wlr_scene_buffer_set_buffer(shell->lock_time_node, b);
-			wlr_scene_buffer_set_dest_size(shell->lock_time_node, w, h);
-			wlr_buffer_drop(b);
-			wlr_scene_node_set_position(&shell->lock_time_node->node, cx - w / 2, cy - h / 2);
-		}
-	} else {
-		node_set(shell->lock_time_node, NULL, 0, 0);
-	}
+	int cx = W / 2, cy = H * 34 / 100;
+	int tsz = H / 9;
+	struct wlr_box tbox = {W / 10, cy - tsz / 2, W * 8 / 10, tsz};
+	figtext_render(shell, shell->lock_time_node, tm, &tbox, cy, 100);
 
 	if (shell->strip_font && dt && dt[0]) {
 		struct wlr_buffer *b = ng_text_render(shell->strip_font, dt, DIM_COLOR, NULL, NULL);
 		if (b) {
 			int dw = b->width;
-			node_set(shell->lock_date_node, b, cx - dw / 2, cy + tsz / 2 + H / 40);
+			node_set(shell->lock_date_node, b, cx - dw / 2, cy + tsz / 2 + H / 30);
 		}
 	} else {
 		node_set(shell->lock_date_node, NULL, 0, 0);
@@ -559,13 +547,6 @@ ng_shell_set_locked(struct ng_shell *shell, int locked, const char *time, const 
 		wlr_scene_node_raise_to_top(&shell->lock->node);
 	}
 	wlr_scene_node_set_enabled(&shell->lock->node, locked);
-	/* rebuild the panel big-fonts at their own size next layout */
-	if (!locked && shell->big_font) {
-		fcft_destroy(shell->big_font);
-		shell->big_font = NULL;
-		shell->big_size = 0;
-		ng_shell_layout(shell, shell->width, shell->height);
-	}
 }
 
 int
@@ -616,7 +597,7 @@ ng_shell_layout(struct ng_shell *shell, int width, int height)
 	if (strip_h < 20)
 		strip_h = 20;
 	int dots_h = height / 44;
-	int pane_h = height * 175 / 1000;
+	int pane_h = height * 205 / 1000;
 
 	int x = margin, w = width - 2 * margin, y = margin;
 
@@ -668,7 +649,7 @@ ng_shell_layout(struct ng_shell *shell, int width, int height)
 	int has_model = shell->model_text && shell->model_text[0];
 	struct wlr_box name_box = shell->top_box;
 	if (has_model)
-		name_box.height = name_box.height * 68 / 100;
+		name_box.height = name_box.height * 78 / 100;
 	ng_shell_size_big_font(shell, name_box.height);
 	bigtext_render(shell, shell->agent_node, shell->agent_text, &name_box, -1);
 
@@ -683,7 +664,7 @@ ng_shell_layout(struct ng_shell *shell, int width, int height)
 	}
 
 	struct wlr_box status_box = shell->bottom_box;
-	status_box.height = status_box.height * 66 / 100;
+	status_box.height = status_box.height * 78 / 100;
 	ng_shell_size_big_font(shell, status_box.height);
 	bigtext_render(shell, shell->status_node, shell->status_text, &status_box, -1);
 
