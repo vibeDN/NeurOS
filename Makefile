@@ -16,7 +16,7 @@ JLEVEL  ?= 8
 
 BRMAKE = $(MAKE) -C $(BR) O=$(O) BR2_EXTERNAL=$(EXT) BR2_DL_DIR=$(DL) BR2_JLEVEL=$(JLEVEL)
 
-.PHONY: all config build menuconfig linux-menuconfig savedefconfig clean distclean vm run sdk
+.PHONY: all config build menuconfig linux-menuconfig savedefconfig clean distclean vm vm-phone run sdk comp ours progress
 
 all: build
 
@@ -53,6 +53,10 @@ distclean:
 
 vm:
 	$(CURDIR)/scripts/make-vm.sh
+
+# portrait 1080x2400 VM matching the phone panel (separate VM, ssh on :2223)
+vm-phone:
+	PHONE=1 $(CURDIR)/scripts/make-vm.sh
 
 run:
 	sg vboxusers -c 'VBoxManage startvm NeurOS-dev --type gui'

@@ -23,6 +23,24 @@ export GALLIUM_DRIVER="${GALLIUM_DRIVER:-llvmpipe}"
 # shows as a second short-lived neuros-comp - expected, not a duplicate compositor
 export LIBSEAT_BACKEND="${LIBSEAT_BACKEND:-builtin}"
 
+# output geometry, in priority order:
+#   /etc/neuros/display.conf  ->  `neuros.mode=WxH[@R]` kernel arg  ->  DMI
+#   product "NeurOS-phone-WxH" (set by `make vm-phone`)  ->  the panel's own mode.
+[ -r /etc/neuros/display.conf ] && . /etc/neuros/display.conf
+if [ -z "${NEUROS_OUTPUT_MODE:-}" ]; then
+	m=$(cat /proc/cmdline 2>/dev/null)
+	case " $m " in *" neuros.mode="*)
+		NEUROS_OUTPUT_MODE=${m##*neuros.mode=}
+		NEUROS_OUTPUT_MODE=${NEUROS_OUTPUT_MODE%% *} ;;
+	esac
+fi
+if [ -z "${NEUROS_OUTPUT_MODE:-}" ]; then
+	prod=$(cat /sys/class/dmi/id/product_name 2>/dev/null)
+	case "$prod" in NeurOS-phone-*) NEUROS_OUTPUT_MODE=${prod#NeurOS-phone-} ;; esac
+fi
+[ -n "${NEUROS_OUTPUT_MODE:-}" ] && export NEUROS_OUTPUT_MODE
+[ -n "${NEUROS_OUTPUT_SCALE:-}" ] && export NEUROS_OUTPUT_SCALE
+
 export TERM=foot
 
 # M3: the agent orchestrator owns a tmux session ("agent"); the centre-pane
