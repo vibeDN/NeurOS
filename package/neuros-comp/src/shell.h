@@ -17,22 +17,15 @@ struct fcft_font;
 
 #define NG_GRADIENT_BANDS 48
 #define NG_FRAME_PX       6
-#define NG_FONT_PATH      "/usr/share/neuros/fonts/neuros-banner.flf"
-
-/* A block of FIGlet text drawn as one scene rect per "ink" cell. */
-struct ng_textblock {
-	struct wlr_scene_tree *tree;
-	struct wlr_scene_rect **cell;
-	int n_cell;
-	char *text;
-	float color[4];
-};
+#define NG_FONT_PATH      "/usr/share/neuros/fonts/neuros-standard.flf"
 
 struct ng_shell {
 	struct cg_server *server;
 	struct wlr_scene_tree *tree; /* chrome, below the views */
 
-	struct flf_font *font;
+	struct flf_font *font;      /* the .flf */
+	struct fcft_font *big_font; /* monospace, sized to the panes */
+	int big_size;              /* current big_font px size (0 = none) */
 
 	struct wlr_scene_rect *band[NG_GRADIENT_BANDS];
 	float top_color[4];
@@ -43,8 +36,11 @@ struct ng_shell {
 		struct wlr_scene_rect *edge[4]; /* top, bottom, left, right border */
 	} top_frame, center_frame, bottom_frame;
 
-	struct ng_textblock agent;  /* top pane  */
-	struct ng_textblock status; /* bottom pane */
+	/* big FIGlet block text (rendered via fcft, scaled to the pane) */
+	struct wlr_scene_buffer *agent_node;
+	char *agent_text;
+	struct wlr_scene_buffer *status_node;
+	char *status_text;
 
 	/* small mono text via fcft: top strip (clock) + bottom activity sub-line */
 	struct fcft_font *strip_font;

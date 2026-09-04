@@ -24,6 +24,8 @@ NEUROS_COMP_DEPENDENCIES = \
 NEUROS_COMP_CONF_OPTS = -Dman-pages=disabled
 
 define NEUROS_COMP_INSTALL_FONT
+	$(INSTALL) -D -m 0644 $(BR2_EXTERNAL_NEUROS_PATH)/package/neuros-comp/fonts/neuros-standard.flf \
+		$(TARGET_DIR)/usr/share/neuros/fonts/neuros-standard.flf
 	$(INSTALL) -D -m 0644 $(BR2_EXTERNAL_NEUROS_PATH)/package/neuros-comp/fonts/neuros-banner.flf \
 		$(TARGET_DIR)/usr/share/neuros/fonts/neuros-banner.flf
 endef

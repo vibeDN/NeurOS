@@ -71,84 +71,78 @@ frame_place(struct ng_frame *f, const struct wlr_box *b, int t)
 	place(f->edge[3], b->x + b->width - t, b->y, t, b->height);       /* right */
 }
 
-/* -- text block ----------------------------------------------------------- */
+/* -- big FIGlet text (rendered as mono via fcft, sized to the pane) ---- */
 
+/* Pick a big_font px size so the .flf art (flf_height rows) fills ~68% of a
+ * pane `pane_h` px tall - rendered near 1:1 so thin strokes stay crisp. */
 static void
-textblock_clear(struct ng_textblock *tb)
+ng_shell_size_big_font(struct ng_shell *shell, int pane_h)
 {
-	for (int i = 0; i < tb->n_cell; i++)
-		if (tb->cell[i])
-			wlr_scene_node_destroy(&tb->cell[i]->node);
-	free(tb->cell);
-	tb->cell = NULL;
-	tb->n_cell = 0;
-}
-
-static void
-textblock_init(struct ng_textblock *tb, struct wlr_scene_tree *parent, const float color[4])
-{
-	tb->tree = wlr_scene_tree_create(parent);
-	memcpy(tb->color, color, sizeof(tb->color));
-	tb->cell = NULL;
-	tb->n_cell = 0;
-	tb->text = NULL;
-}
-
-/* (re)render tb->text with `font`, fitted and centred inside `box`. */
-static void
-textblock_render(struct ng_textblock *tb, const struct flf_font *font, const struct wlr_box *box)
-{
-	textblock_clear(tb);
-	if (!font || !tb->text || !tb->text[0] || box->width < 4 || box->height < 4)
+	int flf_h = shell->font ? shell->font->height : 6;
+	if (flf_h < 1)
+		flf_h = 6;
+	int sz = pane_h * 68 / 100 / flf_h;
+	if (sz < 8)
+		sz = 8;
+	if (sz > 72)
+		sz = 72;
+	if (sz == shell->big_size && shell->big_font)
 		return;
 
-	struct flf_render *r = flf_render_text(font, tb->text);
-	if (!r)
+	if (shell->big_font)
+		fcft_destroy(shell->big_font);
+	char attr[32];
+	snprintf(attr, sizeof(attr), "size=%d", sz);
+	const char *names[] = {"monospace"};
+	shell->big_font = fcft_from_name(1, names, attr);
+	shell->big_size = shell->big_font ? sz : 0;
+}
+
+
+/* Render `text` through the .flf, draw the art with big_font, scale the buffer
+ * to ~82% of `box` and centre it. */
+static void
+bigtext_render(struct ng_shell *shell, struct wlr_scene_buffer *node, const char *text, const struct wlr_box *box)
+{
+	if (!node)
 		return;
-
-	/* cell size: fit the rendered grid into the box (~78%), keep square cells */
-	int cw = (box->width * 78 / 100) / (r->cols > 0 ? r->cols : 1);
-	int ch = (box->height * 78 / 100) / (r->rows > 0 ? r->rows : 1);
-	int cell = cw < ch ? cw : ch;
-	if (cell < 1)
-		cell = 1;
-
-	int total_w = cell * r->cols;
-	int total_h = cell * r->rows;
-	int ox = box->x + (box->width - total_w) / 2;
-	int oy = box->y + (box->height - total_h) / 2;
-
-	int ink = 0;
-	for (int i = 0; i < r->rows * r->cols; i++)
-		ink += r->cell[i] ? 1 : 0;
-
-	tb->cell = calloc(ink > 0 ? ink : 1, sizeof(*tb->cell));
-	if (!tb->cell) {
-		flf_render_free(r);
+	if (!shell->font || !shell->big_font || !text || !text[0] || box->width < 8 || box->height < 8) {
+		wlr_scene_buffer_set_buffer(node, NULL);
 		return;
 	}
 
-	int n = 0;
-	for (int y = 0; y < r->rows; y++) {
-		for (int x = 0; x < r->cols; x++) {
-			if (!r->cell[y * r->cols + x])
-				continue;
-			struct wlr_scene_rect *px = wlr_scene_rect_create(tb->tree, cell, cell, tb->color);
-			if (!px)
-				continue;
-			wlr_scene_node_set_position(&px->node, ox + x * cell, oy + y * cell);
-			tb->cell[n++] = px;
-		}
+	char *art = flf_render_string(shell->font, text);
+	if (!art) {
+		wlr_scene_buffer_set_buffer(node, NULL);
+		return;
 	}
-	tb->n_cell = n;
-	flf_render_free(r);
-}
 
-static void
-textblock_set_text(struct ng_textblock *tb, const char *text)
-{
-	free(tb->text);
-	tb->text = text ? strdup(text) : NULL;
+	int w = 0, h = 0;
+	struct wlr_buffer *buf = ng_text_render(shell->big_font, art, TEXT_COLOR, &w, &h);
+	free(art);
+	if (!buf || w < 1 || h < 1) {
+		wlr_scene_buffer_set_buffer(node, NULL);
+		return;
+	}
+
+	/* fit into 82% of the box, preserve aspect */
+	int fitw = box->width * 82 / 100;
+	int fith = box->height * 82 / 100;
+	double sx = (double) fitw / w, sy = (double) fith / h;
+	double s = sx < sy ? sx : sy;
+	int dw = (int) (w * s), dh = (int) (h * s);
+	if (dw < 1)
+		dw = 1;
+	if (dh < 1)
+		dh = 1;
+
+	wlr_scene_buffer_set_buffer(node, buf);
+	wlr_scene_buffer_set_dest_size(node, dw, dh);
+	wlr_buffer_drop(buf);
+
+	int x = box->x + (box->width - dw) / 2;
+	int y = box->y + (box->height - dh) / 2;
+	wlr_scene_node_set_position(&node->node, x, y);
 }
 
 /* -- shell -------------------------------------------------------------- */
@@ -178,19 +172,22 @@ ng_shell_create(struct cg_server *server)
 	frame_create(&shell->center_frame, shell->tree);
 	frame_create(&shell->bottom_frame, shell->tree);
 
-	textblock_init(&shell->agent, shell->tree, TEXT_COLOR);
-	textblock_init(&shell->status, shell->tree, TEXT_COLOR);
-	textblock_set_text(&shell->agent, "NeurOS");
-	textblock_set_text(&shell->status, "Idle");
-
 	static bool fcft_ready = false;
-	if (!fcft_ready) {
+	if (!fcft_ready)
 		fcft_ready = fcft_init(FCFT_LOG_COLORIZE_NEVER, false, FCFT_LOG_CLASS_ERROR);
-	}
+
 	const char *names[] = {"monospace"};
 	shell->strip_font = fcft_from_name(1, names, "size=13");
 	if (!shell->strip_font)
-		wlr_log(WLR_ERROR, "ng_shell: no monospace font (strip text disabled)");
+		wlr_log(WLR_ERROR, "ng_shell: no monospace font (text disabled)");
+	shell->big_font = NULL; /* sized in ng_shell_layout to the pane height */
+	shell->big_size = 0;
+
+	shell->agent_node = wlr_scene_buffer_create(shell->tree, NULL);
+	shell->status_node = wlr_scene_buffer_create(shell->tree, NULL);
+	shell->agent_text = strdup("NeurOS");
+	shell->status_text = strdup("Idle");
+
 	shell->strip_node = wlr_scene_buffer_create(shell->tree, NULL);
 	shell->strip_right_node = wlr_scene_buffer_create(shell->tree, NULL);
 	shell->activity_node = wlr_scene_buffer_create(shell->tree, NULL);
@@ -206,15 +203,15 @@ ng_shell_destroy(struct ng_shell *shell)
 {
 	if (!shell)
 		return;
-	textblock_clear(&shell->agent);
-	textblock_clear(&shell->status);
-	free(shell->agent.text);
-	free(shell->status.text);
+	free(shell->agent_text);
+	free(shell->status_text);
 	free(shell->strip_text);
 	free(shell->strip_right_text);
 	free(shell->activity_text);
 	if (shell->strip_font)
 		fcft_destroy(shell->strip_font);
+	if (shell->big_font)
+		fcft_destroy(shell->big_font);
 	if (shell->font)
 		flf_free(shell->font);
 	if (shell->tree)
@@ -238,15 +235,17 @@ ng_shell_set_colors(struct ng_shell *shell, const float top[4], const float bott
 void
 ng_shell_set_agent(struct ng_shell *shell, const char *name)
 {
-	textblock_set_text(&shell->agent, name);
-	textblock_render(&shell->agent, shell->font, &shell->top_box);
+	free(shell->agent_text);
+	shell->agent_text = name ? strdup(name) : NULL;
+	bigtext_render(shell, shell->agent_node, shell->agent_text, &shell->top_box);
 }
 
 void
 ng_shell_set_status(struct ng_shell *shell, const char *state)
 {
-	textblock_set_text(&shell->status, state);
-	textblock_render(&shell->status, shell->font, &shell->bottom_box);
+	free(shell->status_text);
+	shell->status_text = state ? strdup(state) : NULL;
+	bigtext_render(shell, shell->status_node, shell->status_text, &shell->bottom_box);
 }
 
 /* left-align the strip buffer, vertically centred in strip_box */
@@ -394,11 +393,15 @@ ng_shell_layout(struct ng_shell *shell, int width, int height)
 	frame_place(&shell->center_frame, &shell->center_box, shell->frame_t);
 	frame_place(&shell->bottom_frame, &shell->bottom_box, shell->frame_t);
 
-	textblock_render(&shell->agent, shell->font, &shell->top_box);
 	/* leave the lower ~28% of the bottom pane for the activity sub-line */
 	struct wlr_box status_box = shell->bottom_box;
 	status_box.height = status_box.height * 72 / 100;
-	textblock_render(&shell->status, shell->font, &status_box);
+
+	int pane_h = shell->top_box.height < status_box.height ? shell->top_box.height : status_box.height;
+	ng_shell_size_big_font(shell, pane_h);
+
+	bigtext_render(shell, shell->agent_node, shell->agent_text, &shell->top_box);
+	bigtext_render(shell, shell->status_node, shell->status_text, &status_box);
 	strip_reposition(shell);
 	strip_right_reposition(shell);
 	activity_reposition(shell);
