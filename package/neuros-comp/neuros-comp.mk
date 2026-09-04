@@ -28,6 +28,12 @@ define NEUROS_COMP_INSTALL_FONT
 		$(TARGET_DIR)/usr/share/neuros/fonts/neuros-standard.flf
 	$(INSTALL) -D -m 0644 $(BR2_EXTERNAL_NEUROS_PATH)/package/neuros-comp/fonts/neuros-banner.flf \
 		$(TARGET_DIR)/usr/share/neuros/fonts/neuros-banner.flf
+	$(INSTALL) -D -m 0644 $(BR2_EXTERNAL_NEUROS_PATH)/package/neuros-comp/fonts/ttf/Doto.ttf \
+		$(TARGET_DIR)/usr/share/fonts/neuros/Doto.ttf
+	$(INSTALL) -D -m 0644 $(BR2_EXTERNAL_NEUROS_PATH)/package/neuros-comp/fonts/ttf/JetBrainsMono.ttf \
+		$(TARGET_DIR)/usr/share/fonts/neuros/JetBrainsMono.ttf
+	$(INSTALL) -D -m 0644 $(BR2_EXTERNAL_NEUROS_PATH)/package/neuros-comp/fonts/ttf/JetBrainsMono-Bold.ttf \
+		$(TARGET_DIR)/usr/share/fonts/neuros/JetBrainsMono-Bold.ttf
 endef
 NEUROS_COMP_POST_INSTALL_TARGET_HOOKS += NEUROS_COMP_INSTALL_FONT
 
