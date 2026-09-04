@@ -24,14 +24,15 @@
 #include "shell.h"
 #include "textbuf.h"
 
-static const float FRAME_COLOR[4] = {0.04f, 0.04f, 0.04f, 1.0f};  /* border */
-static const float PANE_TINT[4] = {0.0f, 0.0f, 0.0f, 0.22f};      /* wash */
-static const float TEXT_COLOR[4] = {0.0f, 0.0f, 0.0f, 1.0f};
-static const float STRIP_COLOR[4] = {0.06f, 0.06f, 0.06f, 0.92f}; /* strip mono */
+/* glassmorphism palette (Claude Design pass, see docs/DESIGN-IMPL.md) */
+static const float FRAME_COLOR[4] = {1.0f, 1.0f, 1.0f, 0.30f};    /* glass border */
+static const float PANE_TINT[4] = {1.0f, 1.0f, 1.0f, 0.10f};      /* glass fill */
+static const float TEXT_COLOR[4] = {0.992f, 0.984f, 0.973f, 1.0f}; /* #fdfbf8 */
+static const float STRIP_COLOR[4] = {0.992f, 0.984f, 0.973f, 0.92f};
 
-/* default wallpaper = Claude accent -> darker shade */
+/* default wallpaper = Claude accent -> darker shade (#D97757 -> #4a2415) */
 static const float DEFAULT_TOP[4] = {0.851f, 0.463f, 0.341f, 1.0f};
-static const float DEFAULT_BOTTOM[4] = {0.361f, 0.169f, 0.110f, 1.0f};
+static const float DEFAULT_BOTTOM[4] = {0.290f, 0.141f, 0.082f, 1.0f};
 
 static void
 lerp4(float out[4], const float a[4], const float b[4], float t)
@@ -71,65 +72,71 @@ frame_place(struct ng_frame *f, const struct wlr_box *b, int t)
 	place(f->edge[3], b->x + b->width - t, b->y, t, b->height);       /* right */
 }
 
-/* -- big FIGlet text (rendered as mono via fcft, sized to the pane) ---- */
+/* -- big text: the Doto display font via fcft, sized to the pane --------- */
 
-/* Pick a big_font px size so the .flf art (flf_height rows) fills ~68% of a
- * pane `pane_h` px tall - rendered near 1:1 so thin strokes stay crisp. */
+#define NG_BIG_FONT  "Doto:weight=210"
+#define NG_MONO_FONT "JetBrains Mono"
+
 static void
 ng_shell_size_big_font(struct ng_shell *shell, int pane_h)
 {
-	int flf_h = shell->font ? shell->font->height : 6;
-	if (flf_h < 1)
-		flf_h = 6;
-	int sz = pane_h * 130 / 100 / flf_h; /* 2x supersample, downscaled by dest_size */
-	if (sz < 8)
-		sz = 8;
-	if (sz > 72)
-		sz = 72;
+	int sz = pane_h * 46 / 100; /* single line, ~46% of the pane height */
+	if (sz < 10)
+		sz = 10;
+	if (sz > 120)
+		sz = 120;
 	if (sz == shell->big_size && shell->big_font)
 		return;
 
 	if (shell->big_font)
 		fcft_destroy(shell->big_font);
-	char attr[32];
+	char attr[48];
 	snprintf(attr, sizeof(attr), "size=%d", sz);
-	const char *names[] = {"monospace"};
+	const char *names[] = {NG_BIG_FONT};
 	shell->big_font = fcft_from_name(1, names, attr);
 	shell->big_size = shell->big_font ? sz : 0;
 }
 
+/* uppercase ASCII copy (design: text-transform:uppercase) */
+static char *
+upper_dup(const char *s)
+{
+	if (!s)
+		return NULL;
+	char *o = strdup(s);
+	if (o)
+		for (char *p = o; *p; p++)
+			if (*p >= 'a' && *p <= 'z')
+				*p -= 32;
+	return o;
+}
 
-/* Render `text` through the .flf, draw the art with big_font, scale the buffer
- * to ~82% of `box` and centre it. */
 static void
 bigtext_render(struct ng_shell *shell, struct wlr_scene_buffer *node, const char *text, const struct wlr_box *box)
 {
 	if (!node)
 		return;
-	if (!shell->font || !shell->big_font || !text || !text[0] || box->width < 8 || box->height < 8) {
+	if (!shell->big_font || !text || !text[0] || box->width < 8 || box->height < 8) {
 		wlr_scene_buffer_set_buffer(node, NULL);
 		return;
 	}
 
-	char *art = flf_render_string(shell->font, text);
-	if (!art) {
-		wlr_scene_buffer_set_buffer(node, NULL);
-		return;
-	}
-
+	char *up = upper_dup(text);
 	int w = 0, h = 0;
-	struct wlr_buffer *buf = ng_text_render(shell->big_font, art, TEXT_COLOR, &w, &h);
-	free(art);
+	struct wlr_buffer *buf = ng_text_render(shell->big_font, up ? up : text, TEXT_COLOR, &w, &h);
+	free(up);
 	if (!buf || w < 1 || h < 1) {
 		wlr_scene_buffer_set_buffer(node, NULL);
 		return;
 	}
 
-	/* fit into 82% of the box, preserve aspect */
-	int fitw = box->width * 82 / 100;
-	int fith = box->height * 82 / 100;
+	/* fit into 88% of the box, preserve aspect */
+	int fitw = box->width * 88 / 100;
+	int fith = box->height * 88 / 100;
 	double sx = (double) fitw / w, sy = (double) fith / h;
 	double s = sx < sy ? sx : sy;
+	if (s > 1.0)
+		s = 1.0;
 	int dw = (int) (w * s), dh = (int) (h * s);
 	if (dw < 1)
 		dw = 1;
@@ -140,9 +147,7 @@ bigtext_render(struct ng_shell *shell, struct wlr_scene_buffer *node, const char
 	wlr_scene_buffer_set_dest_size(node, dw, dh);
 	wlr_buffer_drop(buf);
 
-	int x = box->x + (box->width - dw) / 2;
-	int y = box->y + (box->height - dh) / 2;
-	wlr_scene_node_set_position(&node->node, x, y);
+	wlr_scene_node_set_position(&node->node, box->x + (box->width - dw) / 2, box->y + (box->height - dh) / 2);
 }
 
 /* -- shell -------------------------------------------------------------- */
@@ -176,7 +181,7 @@ ng_shell_create(struct cg_server *server)
 	if (!fcft_ready)
 		fcft_ready = fcft_init(FCFT_LOG_COLORIZE_NEVER, false, FCFT_LOG_CLASS_ERROR);
 
-	const char *names[] = {"monospace"};
+	const char *names[] = {NG_MONO_FONT};
 	shell->strip_font = fcft_from_name(1, names, "size=13");
 	if (!shell->strip_font)
 		wlr_log(WLR_ERROR, "ng_shell: no monospace font (text disabled)");
