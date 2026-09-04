@@ -468,3 +468,27 @@ flf_fill(struct flf_render *r)
 	free(stack);
 	free(outside);
 }
+
+void
+flf_dilate(struct flf_render *r, int n)
+{
+	if (!r || n < 1 || r->rows < 1 || r->cols < 1)
+		return;
+	int R = r->rows, C = r->cols;
+	size_t N = (size_t) R * C;
+	uint8_t *src = malloc(N);
+	if (!src)
+		return;
+	for (int pass = 0; pass < n; pass++) {
+		memcpy(src, r->cell, N);
+		for (int y = 0; y < R; y++)
+			for (int x = 0; x < C; x++) {
+				if (src[y * C + x])
+					continue;
+				if ((x > 0 && src[y * C + x - 1]) || (x < C - 1 && src[y * C + x + 1]) ||
+				    (y > 0 && src[(y - 1) * C + x]) || (y < R - 1 && src[(y + 1) * C + x]))
+					r->cell[y * C + x] = 1;
+			}
+	}
+	free(src);
+}
