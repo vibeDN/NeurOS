@@ -34,12 +34,15 @@ log() { echo "[agentd] $*" >&2; }
 if ! tmux has-session -t "$TMUX_SESSION" 2>/dev/null; then
 	# drop privileges to AGENT_USER when set and we're root; else run in place.
 	# (AGENT_WORKDIR / AGENT_CMD are simple tokens - no spaces - so no quoting.)
+	# COLORTERM makes Claude Code emit 24-bit colour (its mascot is orange, not
+	# pink); su strips the env so it has to be set inside the -c string.
 	if [ -n "$AGENT_USER" ] && [ "$(id -u)" = 0 ] && id "$AGENT_USER" >/dev/null 2>&1; then
 		log "starting agent: $AGENT_CMD as $AGENT_USER (cwd $AGENT_WORKDIR)"
-		AGENT_LAUNCH="su -s /bin/sh $AGENT_USER -c 'cd $AGENT_WORKDIR && exec $AGENT_CMD'"
+		AGENT_LAUNCH="su -s /bin/sh $AGENT_USER -c 'export COLORTERM=truecolor; cd $AGENT_WORKDIR && exec $AGENT_CMD'"
 	else
 		log "starting agent: $AGENT_CMD (cwd $AGENT_WORKDIR)"
 		mkdir -p "$AGENT_WORKDIR"
+		export COLORTERM=truecolor
 		AGENT_LAUNCH="$AGENT_CMD"
 	fi
 	tmux new-session -d -s "$TMUX_SESSION" -x 220 -y 50 -c "$AGENT_WORKDIR" "$AGENT_LAUNCH"
