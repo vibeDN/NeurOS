@@ -94,6 +94,15 @@ utf8_decode(const char *s, uint32_t *cps, size_t cap)
 	return n;
 }
 
+/* poor-man's emboldening: re-strike each glyph N extra px to the right.
+ * ng_text_set_bold(n) affects the next ng_text_render call, then resets. */
+static int g_bold = 0;
+void
+ng_text_set_bold(int px)
+{
+	g_bold = px < 0 ? 0 : px;
+}
+
 /* width in px of one UTF-32 line */
 static int
 line_width(struct fcft_font *font, const uint32_t *cps, size_t n)
@@ -166,11 +175,14 @@ ng_text_render(struct fcft_font *font, const char *utf8, const float color[4], i
 			if (!g)
 				continue;
 			if (g->pix)
-				pixman_image_composite32(PIXMAN_OP_OVER, src, g->pix, dst, 0, 0, 0, 0,
-							 pen + g->x, baseline - g->y, g->width, g->height);
-			pen += g->advance.x;
+				for (int b = 0; b <= g_bold; b++)
+					pixman_image_composite32(PIXMAN_OP_OVER, src, g->pix, dst, 0, 0, 0, 0,
+								 pen + g->x + b, baseline - g->y, g->width,
+								 g->height);
+			pen += g->advance.x + (g_bold ? 1 : 0);
 		}
 	}
+	g_bold = 0;
 
 	pixman_image_unref(src);
 	pixman_image_unref(dst);

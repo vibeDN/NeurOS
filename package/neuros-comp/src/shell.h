@@ -65,7 +65,8 @@ struct ng_shell {
 	struct wlr_box bottom_box;
 
 	int width, height;
-	int frame_t; /* border thickness, scaled to the output */
+	int frame_t;   /* hairline border */
+	int panel_rad; /* glass panel corner radius - view.c insets the client by it */
 };
 
 struct ng_shell *ng_shell_create(struct cg_server *server);

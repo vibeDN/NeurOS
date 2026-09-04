@@ -14,6 +14,9 @@ struct wlr_buffer;
 struct wlr_buffer *ng_text_render(struct fcft_font *font, const char *utf8, const float color[4], int *out_w,
 				  int *out_h);
 
+/* Emboldens the NEXT ng_text_render call by `px` extra strikes, then resets. */
+void ng_text_set_bold(int px);
+
 /* Frosted-glass panel: rounded rect (radius `rad`), faint top->bottom white fill
  * gradient, ~1.5px lighter border, inset top highlight. `dark` != 0 fills a
  * darker translucent centre (the chat pane). Buffer is premultiplied ARGB. */

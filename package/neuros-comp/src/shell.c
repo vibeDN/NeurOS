@@ -88,6 +88,17 @@ ng_shell_size_big_font(struct ng_shell *shell, int pane_h)
 	shell->big_size = shell->big_font ? sz : 0;
 }
 
+/* safe assign - handles src aliasing *dst (ng_shell_layout re-feeds the setters) */
+static void
+str_set(char **dst, const char *src)
+{
+	if (src == *dst)
+		return;
+	char *n = src ? strdup(src) : NULL;
+	free(*dst);
+	*dst = n;
+}
+
 static char *
 upper_dup(const char *s)
 {
@@ -115,6 +126,7 @@ bigtext_render(struct ng_shell *shell, struct wlr_scene_buffer *node, const char
 	}
 	char *up = upper_dup(text);
 	int w = 0, h = 0;
+	ng_text_set_bold(shell->big_size / 22 + 1); /* Doto looks thin at display size */
 	struct wlr_buffer *buf = ng_text_render(shell->big_font, up ? up : text, TEXT_COLOR, &w, &h);
 	free(up);
 	if (!buf || w < 1 || h < 1) {
@@ -251,8 +263,7 @@ ng_shell_set_colors(struct ng_shell *shell, const float top[4], const float bott
 void
 ng_shell_set_agent(struct ng_shell *shell, const char *name)
 {
-	free(shell->agent_text);
-	shell->agent_text = name ? strdup(name) : NULL;
+	str_set(&shell->agent_text, name);
 	/* light the matching scaffold dot */
 	static const char *keys[6] = {"claude", "chatgpt", "gemini", "kimi", "deepseek", "qwen"};
 	if (name)
@@ -271,8 +282,7 @@ ng_shell_set_agent(struct ng_shell *shell, const char *name)
 void
 ng_shell_set_status(struct ng_shell *shell, const char *state)
 {
-	free(shell->status_text);
-	shell->status_text = state ? strdup(state) : NULL;
+	str_set(&shell->status_text, state);
 	struct wlr_box b = shell->bottom_box;
 	b.height = b.height * 66 / 100;
 	ng_shell_size_big_font(shell, b.height);
@@ -282,16 +292,14 @@ ng_shell_set_status(struct ng_shell *shell, const char *state)
 void
 ng_shell_set_model(struct ng_shell *shell, const char *model)
 {
-	free(shell->model_text);
-	shell->model_text = model ? strdup(model) : NULL;
+	str_set(&shell->model_text, model);
 	ng_shell_layout(shell, shell->width, shell->height);
 }
 
 void
 ng_shell_set_strip(struct ng_shell *shell, const char *text)
 {
-	free(shell->strip_text);
-	shell->strip_text = text ? strdup(text) : NULL;
+	str_set(&shell->strip_text, text);
 	monotext(shell, shell->strip_node, shell->strip_text, TEXT_COLOR);
 	if (shell->strip_node->buffer)
 		wlr_scene_node_set_position(&shell->strip_node->node, shell->strip_box.x,
@@ -302,8 +310,7 @@ ng_shell_set_strip(struct ng_shell *shell, const char *text)
 void
 ng_shell_set_strip_right(struct ng_shell *shell, const char *text)
 {
-	free(shell->strip_right_text);
-	shell->strip_right_text = text ? strdup(text) : NULL;
+	str_set(&shell->strip_right_text, text);
 	monotext(shell, shell->strip_right_node, shell->strip_right_text, DIM_COLOR);
 	if (shell->strip_right_node->buffer)
 		wlr_scene_node_set_position(
@@ -316,8 +323,7 @@ ng_shell_set_strip_right(struct ng_shell *shell, const char *text)
 void
 ng_shell_set_activity(struct ng_shell *shell, const char *text)
 {
-	free(shell->activity_text);
-	shell->activity_text = text ? strdup(text) : NULL;
+	str_set(&shell->activity_text, text);
 	char buf[128];
 	if (text && text[0]) {
 		snprintf(buf, sizeof(buf), "using %s", text);
@@ -349,9 +355,12 @@ ng_shell_layout(struct ng_shell *shell, int width, int height)
 
 	int margin = height / 46;
 	int gap = height / 60;
-	int rad = width / 20;
-	if (rad > 34)
-		rad = 34;
+	int rad = width / 22;
+	if (rad > 30)
+		rad = 30;
+	if (rad < 8)
+		rad = 8;
+	shell->panel_rad = rad;
 
 	int strip_h = height * 34 / 1000;
 	if (strip_h < 20)

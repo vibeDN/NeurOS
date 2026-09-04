@@ -77,7 +77,9 @@ view_position(struct cg_view *view)
 	struct wlr_box target = layout_box;
 	struct ng_shell *shell = view->server->shell;
 	if (shell) {
-		int t = shell->frame_t > 0 ? shell->frame_t : NG_FRAME_PX;
+		/* inset by the panel radius so the rounded glass corners stay visible
+		 * (wlr_scene has no rounded clip) */
+		int t = shell->panel_rad > 0 ? shell->panel_rad * 3 / 4 : NG_FRAME_PX;
 		if (shell->center_box.width > 2 * t && shell->center_box.height > 2 * t) {
 			target = (struct wlr_box){
 				.x = shell->center_box.x + t,
