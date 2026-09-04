@@ -242,6 +242,22 @@ ng_shell_create(struct cg_server *server)
 		shell->mic_node = wlr_scene_buffer_create(shell->overlay, NULL);
 	}
 
+	/* lockscreen tree - created last so it's above everything; starts hidden */
+	shell->lock = wlr_scene_tree_create(&server->scene->tree);
+	if (shell->lock) {
+		/* premultiplied: a dark tint that hides the shell but keeps the
+		 * gradient reading through (~12%) */
+		static const float scrim[4] = {0.075f, 0.037f, 0.022f, 0.88f};
+		shell->lock_dim = wlr_scene_rect_create(shell->lock, 1, 1, scrim);
+		shell->lock_time_node = wlr_scene_buffer_create(shell->lock, NULL);
+		shell->lock_date_node = wlr_scene_buffer_create(shell->lock, NULL);
+		shell->lock_mic_node = wlr_scene_buffer_create(shell->lock, NULL);
+		shell->lock_lock_node = wlr_scene_buffer_create(shell->lock, NULL);
+		shell->lock_cam_node = wlr_scene_buffer_create(shell->lock, NULL);
+		shell->lock_hint_node = wlr_scene_buffer_create(shell->lock, NULL);
+		wlr_scene_node_set_enabled(&shell->lock->node, false);
+	}
+
 	shell->agent_text = strdup("NeurOS");
 	shell->status_text = strdup("Idle");
 	shell->model_text = NULL;
@@ -262,6 +278,8 @@ ng_shell_destroy(struct ng_shell *shell)
 	free(shell->strip_text);
 	free(shell->strip_right_text);
 	free(shell->activity_text);
+	free(shell->lock_time_text);
+	free(shell->lock_date_text);
 	if (shell->strip_font)
 		fcft_destroy(shell->strip_font);
 	if (shell->big_font)
@@ -421,6 +439,156 @@ ng_shell_press_button(struct ng_shell *shell, int which)
 		ng_shell_set_mic(shell, !shell->mic_on);
 		ng_spawn("neuros-mic toggle");
 	}
+}
+
+/* -- lockscreen ------------------------------------------------------- */
+
+static void
+lock_layout(struct ng_shell *shell)
+{
+	if (!shell->lock || shell->width < 16 || shell->height < 16)
+		return;
+	int W = shell->width, H = shell->height;
+
+	/* scrim: near-opaque, tinted to a dark shade of the agent's own gradient
+	 * (premultiplied colour) so it reads on-brand and fully hides the shell */
+	float sa = 0.965f;
+	float scrim[4] = {shell->bottom_color[0] * 0.55f * sa, shell->bottom_color[1] * 0.55f * sa,
+			  shell->bottom_color[2] * 0.55f * sa, sa};
+	wlr_scene_rect_set_color(shell->lock_dim, scrim);
+	place(shell->lock_dim, 0, 0, W, H);
+
+	/* big time, centred a bit above the middle */
+	const char *tm = shell->lock_time_text;
+	const char *dt = shell->lock_date_text;
+	if ((!tm || !tm[0]) && shell->strip_text && shell->strip_text[0]) {
+		/* fall back to the strip clock "HH:MM     Day DD Mon" */
+		static char tbuf[16], dbuf[64];
+		int n = sscanf(shell->strip_text, "%15s", tbuf);
+		if (n == 1) {
+			tm = tbuf;
+			const char *rest = strstr(shell->strip_text, tbuf);
+			if (rest) {
+				rest += strlen(tbuf);
+				while (*rest == ' ')
+					rest++;
+				snprintf(dbuf, sizeof(dbuf), "%s", rest);
+				if (dbuf[0])
+					dt = dbuf;
+			}
+		}
+	}
+
+	int cx = W / 2, cy = H * 35 / 100;
+	int tsz = H / 10;
+	if (tsz < 24)
+		tsz = 24;
+	if (shell->big_font && shell->big_size != tsz) {
+		fcft_destroy(shell->big_font);
+		shell->big_font = NULL;
+		shell->big_size = 0;
+	}
+	ng_shell_size_big_font(shell, tsz * 100 / 42);
+	if (shell->big_font && tm && tm[0]) {
+		char *up = upper_dup(tm);
+		int w = 0, h = 0;
+		ng_text_set_bold(shell->big_size / 26 + 1);
+		struct wlr_buffer *b = ng_text_render(shell->big_font, up ? up : tm, TEXT_COLOR, &w, &h);
+		free(up);
+		if (b) {
+			wlr_scene_buffer_set_buffer(shell->lock_time_node, b);
+			wlr_scene_buffer_set_dest_size(shell->lock_time_node, w, h);
+			wlr_buffer_drop(b);
+			wlr_scene_node_set_position(&shell->lock_time_node->node, cx - w / 2, cy - h / 2);
+		}
+	} else {
+		node_set(shell->lock_time_node, NULL, 0, 0);
+	}
+
+	if (shell->strip_font && dt && dt[0]) {
+		struct wlr_buffer *b = ng_text_render(shell->strip_font, dt, DIM_COLOR, NULL, NULL);
+		if (b) {
+			int dw = b->width;
+			node_set(shell->lock_date_node, b, cx - dw / 2, cy + tsz / 2 + H / 40);
+		}
+	} else {
+		node_set(shell->lock_date_node, NULL, 0, 0);
+	}
+
+	/* bottom button row: mic - lock - camera */
+	int bd = H / 16;
+	if (bd < 34)
+		bd = 34;
+	if (bd > 60)
+		bd = 60;
+	int lbd = bd * 5 / 4;
+	int row_y = H - H / 6 - lbd;
+	int gap = W / 5;
+	shell->lock_mic_box = (struct wlr_box){cx - gap - bd / 2, row_y + (lbd - bd) / 2, bd, bd};
+	shell->lock_lock_box = (struct wlr_box){cx - lbd / 2, row_y, lbd, lbd};
+	shell->lock_cam_box = (struct wlr_box){cx + gap - bd / 2, row_y + (lbd - bd) / 2, bd, bd};
+
+	node_set(shell->lock_mic_node, ng_button_render(bd, 1, BTN_BG, BTN_RING, BTN_FG),
+		 shell->lock_mic_box.x, shell->lock_mic_box.y);
+	node_set(shell->lock_cam_node, ng_button_render(bd, 0, BTN_BG, BTN_RING, BTN_FG),
+		 shell->lock_cam_box.x, shell->lock_cam_box.y);
+	float acc[4] = {shell->top_color[0], shell->top_color[1], shell->top_color[2], 0.9f};
+	node_set(shell->lock_lock_node, ng_button_render(lbd, 2, BTN_BG, acc, BTN_FG), shell->lock_lock_box.x,
+		 shell->lock_lock_box.y);
+
+	if (shell->strip_font) {
+		struct wlr_buffer *b = ng_text_render(shell->strip_font, "tap the lock to unlock", DIM_COLOR, NULL, NULL);
+		if (b)
+			node_set(shell->lock_hint_node, b, cx - b->width / 2, row_y + lbd + H / 60);
+	}
+}
+
+void
+ng_shell_set_locked(struct ng_shell *shell, int locked, const char *time, const char *date)
+{
+	if (!shell || !shell->lock)
+		return;
+	locked = locked ? 1 : 0;
+	if (time)
+		str_set(&shell->lock_time_text, time);
+	if (date)
+		str_set(&shell->lock_date_text, date);
+	shell->locked = locked;
+	if (locked) {
+		lock_layout(shell);
+		wlr_scene_node_raise_to_top(&shell->lock->node);
+	}
+	wlr_scene_node_set_enabled(&shell->lock->node, locked);
+	/* rebuild the panel big-fonts at their own size next layout */
+	if (!locked && shell->big_font) {
+		fcft_destroy(shell->big_font);
+		shell->big_font = NULL;
+		shell->big_size = 0;
+		ng_shell_layout(shell, shell->width, shell->height);
+	}
+}
+
+int
+ng_shell_is_locked(struct ng_shell *shell)
+{
+	return shell && shell->locked;
+}
+
+int
+ng_shell_lock_tap(struct ng_shell *shell, double lx, double ly)
+{
+	if (!shell || !shell->locked)
+		return 0;
+	if (in_box(&shell->lock_lock_box, lx, ly)) {
+		ng_shell_set_locked(shell, 0, NULL, NULL);
+		return 1;
+	}
+	if (in_box(&shell->lock_mic_box, lx, ly)) {
+		ng_shell_set_mic(shell, !shell->mic_on);
+		ng_spawn("neuros-mic toggle");
+		return 1;
+	}
+	return 1; /* swallow every tap while locked */
 }
 
 void

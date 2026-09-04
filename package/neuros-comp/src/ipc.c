@@ -78,6 +78,14 @@ handle_line(struct ng_ipc *ipc, char *line)
 			ng_shell_set_mic(shell, !shell->mic_on);
 		else
 			ng_shell_set_mic(shell, arg && strcmp(arg, "on") == 0);
+	} else if (strcmp(line, "lock") == 0) {
+		/* optional "HH:MM|Weekday DD Month" */
+		char *bar = arg ? strchr(arg, '|') : NULL;
+		if (bar)
+			*bar++ = '\0';
+		ng_shell_set_locked(shell, 1, (arg && arg[0]) ? arg : NULL, bar);
+	} else if (strcmp(line, "unlock") == 0) {
+		ng_shell_set_locked(shell, 0, NULL, NULL);
 	} else if (strcmp(line, "colors") == 0 && arg) {
 		char *sp = strchr(arg, ' ');
 		float top[4], bot[4];

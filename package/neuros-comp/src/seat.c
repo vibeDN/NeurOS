@@ -508,9 +508,15 @@ handle_touch_down(struct wl_listener *listener, void *data)
 	wlr_cursor_absolute_to_layout_coords(seat->cursor, &event->touch->base, event->x, event->y, &lx, &ly);
 
 	if (seat->server->shell) {
-		int b = ng_shell_button_at(seat->server->shell, lx, ly);
+		struct ng_shell *sh = seat->server->shell;
+		if (ng_shell_is_locked(sh)) {
+			ng_shell_lock_tap(sh, lx, ly);
+			wlr_idle_notifier_v1_notify_activity(seat->server->idle, seat->seat);
+			return;
+		}
+		int b = ng_shell_button_at(sh, lx, ly);
 		if (b) {
-			ng_shell_press_button(seat->server->shell, b);
+			ng_shell_press_button(sh, b);
 			wlr_idle_notifier_v1_notify_activity(seat->server->idle, seat->seat);
 			return;
 		}
@@ -622,9 +628,15 @@ handle_cursor_button(struct wl_listener *listener, void *data)
 	struct wlr_pointer_button_event *event = data;
 
 	if ((uint32_t) event->state == WLR_BUTTON_PRESSED && seat->server->shell) {
-		int b = ng_shell_button_at(seat->server->shell, seat->cursor->x, seat->cursor->y);
+		struct ng_shell *sh = seat->server->shell;
+		if (ng_shell_is_locked(sh)) {
+			ng_shell_lock_tap(sh, seat->cursor->x, seat->cursor->y);
+			wlr_idle_notifier_v1_notify_activity(seat->server->idle, seat->seat);
+			return;
+		}
+		int b = ng_shell_button_at(sh, seat->cursor->x, seat->cursor->y);
 		if (b) {
-			ng_shell_press_button(seat->server->shell, b);
+			ng_shell_press_button(sh, b);
 			wlr_idle_notifier_v1_notify_activity(seat->server->idle, seat->seat);
 			return;
 		}

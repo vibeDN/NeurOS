@@ -72,6 +72,20 @@ struct ng_shell {
 	struct wlr_box center_box;
 	struct wlr_box bottom_box;
 
+	/* lockscreen (compositor-drawn overlay; tap the lock to unlock, no PIN) */
+	struct wlr_scene_tree *lock;
+	struct wlr_scene_rect *lock_dim;
+	struct wlr_scene_buffer *lock_time_node;
+	struct wlr_scene_buffer *lock_date_node;
+	struct wlr_scene_buffer *lock_mic_node;
+	struct wlr_scene_buffer *lock_lock_node;
+	struct wlr_scene_buffer *lock_cam_node;
+	struct wlr_scene_buffer *lock_hint_node;
+	struct wlr_box lock_mic_box, lock_lock_box, lock_cam_box;
+	char *lock_time_text;
+	char *lock_date_text;
+	int locked;
+
 	int width, height;
 	int frame_t;   /* hairline border */
 	int panel_rad; /* glass panel corner radius - view.c insets the client by it */
@@ -103,5 +117,11 @@ void ng_shell_press_button(struct ng_shell *shell, int which);
 
 /* Keep the overlay buttons above the client; call when a view maps. */
 void ng_shell_raise_overlay(struct ng_shell *shell);
+
+/* Lockscreen. `time`/`date` may be NULL (falls back to the strip clock). */
+void ng_shell_set_locked(struct ng_shell *shell, int locked, const char *time, const char *date);
+int ng_shell_is_locked(struct ng_shell *shell);
+/* Tap while locked: returns 1 if it hit the unlock control (and unlocked). */
+int ng_shell_lock_tap(struct ng_shell *shell, double lx, double ly);
 
 #endif

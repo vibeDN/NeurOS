@@ -298,16 +298,40 @@ minimal Android property/HAL container (for camera). Packaged in this BR2_EXTERN
 - **AVB**: disable verification **permanently** (patch/empty `vbmeta`). No own
   key, no signing, no re-lock - user does not want to re-lock the bootloader.
 
+## Resolved (2026-09-04, batch 4)
+
+- **Non-root agent user** (`board/neuros/x86_64/users.table`): the agent CLI runs
+  as `claude` (uid 1000, home `/home/claude`). `neuros-agentd` (root) still
+  orchestrates + drives the compositor IPC; only the CLI drops privileges via
+  `su -s /bin/sh claude -c '...'` inside the tmux session. Unblocks Claude Code's
+  `bypassPermissions` (refused as root) -> fully prompt-free autonomous flow.
+  `.claude.json` also needs `bypassPermissionsModeAccepted:true` to skip the
+  one-time warning. Per-agent `/home/claude/memory/{you,topics,area}` +
+  `~/.claude/CLAUDE.md` (the mandatory memory prompt, `<agent>` substituted) laid
+  down by post-build; mkusers chowns `/home/claude` -R afterwards.
+  `AGENT_USER` in agentd.conf (empty = run as root).
+- **Portrait / phone resolution**: `NEUROS_OUTPUT_MODE=WxH[@R]` +
+  `NEUROS_OUTPUT_SCALE` env in `output.c` -> `wlr_output_state_set_custom_mode`.
+  Phone panel is 1080x2400 (20:9); set it here on the real target too.
+- **Lockscreen (v1, compositor-drawn)**: not `ext-session-lock-v1` yet - a scene
+  overlay in `shell.c` (`ng_shell_set_locked`): dim scrim + big Doto clock + date
+  + mic/lock/camera glass row, tap the lock (or `neuros-ctl unlock`) to dismiss.
+  `neuros-ctl lock "HH:MM|Weekday DD Month"`, `neuros-lock [lock|unlock]`. seat.c
+  swallows all input while locked. TODO: promote to real `ext-session-lock-v1`
+  for actual security (this is a visual/UX stand-in).
+
 ## Still open
 - **Big-font look** - user is doing the real design in Claude Design; will send a
   mockup. Current: thin FIGlet Standard via fcft (reverted the filled/`banner`
   attempts - `flf_fill`/`flf_dilate`/`ng_grid_render` also reverted; Standard is
   dense line-art and blobs when filled). `flf_render_string` + kerning/smushing
   is solid and stays. Both `.flf` bundled; `NG_FONT_PATH` selects.
-- Lockscreen unlock gesture (PIN / any-key / pattern).
-- **Non-root agent user** so Claude Code can run `bypassPermissions` (autonomous
-  voice flow shouldn't stall on prompts). Ties into per-agent `/home/<agent>/`.
+- Lockscreen: promote the compositor overlay to real `ext-session-lock-v1`
+  (`wlr_session_lock_v1`) so it's an actual security boundary, not just visual.
 - Camera pane (centre-panel camera mode + `neuros-camera` action).
+- agent-status classifier for Claude Code v2 output (status stayed "Idle" with
+  real CC - the line patterns in `agent-status` target the mock / older TUI;
+  switch to polling `tmux capture-pane` for `esc to interrupt`).
 - Pick the exact newest-stable HyperOS fastboot ROM build for sweet.
 - Claw'd mascot: rights request sent to Anthropic (pending).
 

@@ -1,0 +1,7 @@
+#!/bin/sh
+# Show / hide the NeurOS lockscreen (compositor overlay; tap the lock to unlock).
+case "${1:-lock}" in
+lock)   neuros-ctl lock "$(date '+%H:%M')|$(date '+%A, %d %B')" ;;
+unlock) neuros-ctl unlock ;;
+*)      echo "usage: neuros-lock [lock|unlock]" >&2; exit 2 ;;
+esac

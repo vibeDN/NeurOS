@@ -12,6 +12,7 @@
 #include "config.h"
 
 #include <assert.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <wayland-server-core.h>
@@ -280,7 +281,29 @@ handle_new_output(struct wl_listener *listener, void *data)
 
 	struct wlr_output_state state = {0};
 	wlr_output_state_set_enabled(&state, true);
-	if (!wl_list_empty(&wlr_output->modes)) {
+
+	/* NEUROS_OUTPUT_MODE=WxH[@R] forces a custom mode (dev: portrait phone
+	 * preview; on the real panel we set 1080x2400 here too). */
+	const char *mode_env = getenv("NEUROS_OUTPUT_MODE");
+	int mw = 0, mh = 0, mr = 0;
+	if (mode_env && sscanf(mode_env, "%dx%d@%d", &mw, &mh, &mr) >= 2 && mw > 0 && mh > 0) {
+		wlr_output_state_set_custom_mode(&state, mw, mh, mr * 1000);
+		if (wlr_output_test_state(wlr_output, &state)) {
+			wlr_log(WLR_INFO, "ng: forced output mode %dx%d@%d", mw, mh, mr);
+		} else {
+			wlr_log(WLR_ERROR, "ng: custom mode %s rejected, falling back", mode_env);
+			wlr_output_state_set_custom_mode(&state, 0, 0, 0);
+			mw = 0;
+		}
+	}
+	const char *scale_env = getenv("NEUROS_OUTPUT_SCALE");
+	if (scale_env) {
+		double s = atof(scale_env);
+		if (s > 0.1 && s < 10.0)
+			wlr_output_state_set_scale(&state, s);
+	}
+
+	if (mw == 0 && !wl_list_empty(&wlr_output->modes)) {
 		struct wlr_output_mode *preferred_mode = wlr_output_preferred_mode(wlr_output);
 		if (preferred_mode) {
 			wlr_output_state_set_mode(&state, preferred_mode);
