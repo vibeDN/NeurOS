@@ -36,6 +36,8 @@ define NEUROS_COMP_INSTALL_FONT
 		$(TARGET_DIR)/usr/share/fonts/neuros/JetBrainsMono.ttf
 	$(INSTALL) -D -m 0644 $(BR2_EXTERNAL_NEUROS_PATH)/package/neuros-comp/fonts/ttf/JetBrainsMono-Bold.ttf \
 		$(TARGET_DIR)/usr/share/fonts/neuros/JetBrainsMono-Bold.ttf
+	$(INSTALL) -D -m 0644 $(BR2_EXTERNAL_NEUROS_PATH)/package/neuros-comp/fonts/ttf/NotoEmoji.ttf \
+		$(TARGET_DIR)/usr/share/fonts/neuros/NotoEmoji.ttf
 endef
 NEUROS_COMP_POST_INSTALL_TARGET_HOOKS += NEUROS_COMP_INSTALL_FONT
 
