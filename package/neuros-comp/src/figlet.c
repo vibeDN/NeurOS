@@ -417,3 +417,54 @@ flf_render_free(struct flf_render *r)
 	free(r->cell);
 	free(r);
 }
+
+void
+flf_fill(struct flf_render *r)
+{
+	if (!r || r->rows < 1 || r->cols < 1)
+		return;
+	int R = r->rows, C = r->cols;
+	size_t N = (size_t) R * C;
+
+	uint8_t *outside = calloc(N, 1);
+	if (!outside)
+		return;
+
+	/* BFS/DFS flood from every border non-ink cell, 4-connectivity */
+	int *stack = malloc(N * sizeof(int));
+	if (!stack) {
+		free(outside);
+		return;
+	}
+	int sp = 0;
+	for (int y = 0; y < R; y++)
+		for (int x = 0; x < C; x++) {
+			if (y != 0 && y != R - 1 && x != 0 && x != C - 1)
+				continue;
+			int i = y * C + x;
+			if (!r->cell[i] && !outside[i]) {
+				outside[i] = 1;
+				stack[sp++] = i;
+			}
+		}
+	while (sp > 0) {
+		int i = stack[--sp];
+		int y = i / C, x = i % C;
+		int nb[4] = {y > 0 ? i - C : -1, y < R - 1 ? i + C : -1, x > 0 ? i - 1 : -1, x < C - 1 ? i + 1 : -1};
+		for (int k = 0; k < 4; k++) {
+			int j = nb[k];
+			if (j >= 0 && !r->cell[j] && !outside[j]) {
+				outside[j] = 1;
+				stack[sp++] = j;
+			}
+		}
+	}
+
+	/* any non-ink cell the flood didn't reach is an interior -> fill it */
+	for (size_t i = 0; i < N; i++)
+		if (!r->cell[i] && !outside[i])
+			r->cell[i] = 1;
+
+	free(stack);
+	free(outside);
+}

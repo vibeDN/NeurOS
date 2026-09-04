@@ -45,4 +45,8 @@ char *flf_render_string(const struct flf_font *f, const char *text);
 struct flf_render *flf_render_text(const struct flf_font *f, const char *text);
 void flf_render_free(struct flf_render *r);
 
+/* Fill the interiors: any non-ink cell not reachable from the border through
+ * non-ink cells becomes ink. Turns outline .flf art into solid block letters. */
+void flf_fill(struct flf_render *r);
+
 #endif

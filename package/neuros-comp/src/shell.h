@@ -17,15 +17,13 @@ struct fcft_font;
 
 #define NG_GRADIENT_BANDS 48
 #define NG_FRAME_PX       6
-#define NG_FONT_PATH      "/usr/share/neuros/fonts/neuros-standard.flf"
+#define NG_FONT_PATH      "/usr/share/neuros/fonts/neuros-banner.flf"
 
 struct ng_shell {
 	struct cg_server *server;
 	struct wlr_scene_tree *tree; /* chrome, below the views */
 
 	struct flf_font *font;      /* the .flf */
-	struct fcft_font *big_font; /* monospace, sized to the panes */
-	int big_size;              /* current big_font px size (0 = none) */
 
 	struct wlr_scene_rect *band[NG_GRADIENT_BANDS];
 	float top_color[4];
