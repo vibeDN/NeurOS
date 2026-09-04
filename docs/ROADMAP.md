@@ -41,8 +41,10 @@
    modem / dsp / persist partitions untouched (blobs load from there). New:
    `boot_a/b`, `vbmeta_a/b`, `neuros_a/b` (erofs root, ~2 GB each), `data`
    (f2fs, remaining space, shared across slots).
-5. **Verity/AVB:** sign `boot` + `vbmeta` with **our own key**. Bootloader stays
-   unlocked (re-lock with a custom AVB key is a later, risky option).
+5. **Verity/AVB:** for dev, **disable verification** - patch the "disable verity /
+   disable verification" flags into `vbmeta` (or flash an empty vbmeta). Phone
+   shows the standard unlocked-bootloader warning at boot; that's fine. Signing
+   `boot`+`vbmeta` with our own AVB key and re-locking is a later hardening step.
 6. **Recovery:** a fastboot-flashable known-good image + a boot-as-recovery
    ramdisk. TWRP optionally kept on the side during bring-up. *(implementer's call)*
 
@@ -256,6 +258,21 @@ minimal Android property/HAL container (for camera). Packaged in this BR2_EXTERN
   `android_device_xiaomi_sweet` / `vendor_xiaomi_sweet`; diff `proprietary-files.txt`
   against the dump -> firmware + blob manifest for M5.
 - Stand up an aarch64 Termux chroot on the phone for userspace smoke tests.
+
+## Resolved (2026-09-04, batch 2)
+
+- **Claude Code**: bake the normal upstream `claude` CLI (+ shared Node) into the
+  image. It has its own auth (enterprise / API key / account) - first run on the
+  device drives that flow. No custom auth code.
+- **Timezone**: `Etc/UTC` (keep). NTP via systemd-timesyncd.
+- **Storage**: implement the erofs ro-root + overlay-/etc + f2fs-data layout on
+  the **x86 dev image** (easier to iterate than on the phone).
+- **Memory prompt** (`docs/agent-memory-prompt.md`): final, unchanged.
+- **HyperOS blob source**: newest stable global build (not the 2024 one).
+- **Halium-style**: confirmed - chosen for hardware completeness/stability
+  (camera is core; mainline sm6150 camera isn't there).
+- **AVB**: disable verification for dev (patch/empty `vbmeta`); signing with our
+  own key + re-locking is a later hardening step, not now.
 
 ## Still open
 - **Big-font look** - user is doing the real design in Claude Design; will send a
