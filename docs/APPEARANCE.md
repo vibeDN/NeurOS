@@ -1,6 +1,26 @@
 # NeurOS - how it should look
 
+**Confirmed by the user 2026-09-04** (Claude Design pass matched this spec).
 Reference mockup: `docs/ui-mockup-v0.jpg`.
+
+## Implementation status (x86 dev shell)
+
+| element | state |
+|---------|-------|
+| thin strip: time/date left, battery right, mono | done |
+| top pane: agent name (FIGlet Standard, kern+smush) | done |
+| top pane: `model` sub-line | **todo** |
+| centre pane: chat = agent CLI in embedded terminal (foot+tmux) | done |
+| centre pane: mascot mode | **todo** (generic; Claw'd pending rights) |
+| centre pane: camera mode | **todo** (needs camera hw / hybris - M6/M7) |
+| centre pane: on-screen [photo] [mic] buttons | **todo** (input hit-testing) |
+| bottom pane: status word (FIGlet) + `using <tool>` | done |
+| wallpaper: per-agent 2-stop gradient | done (48 rects, not a GLES shader yet) |
+| per-agent colour presets (the 6) | **todo** (only Claude default wired; `neuros-ctl colors` takes any) |
+| lockscreen (`ext-session-lock-v1`) | **todo** |
+| mic toggle + VAD -> Whisper -> agent | done (`neuros-mic` CLI; on-screen button todo) |
+| 6-agent framework, v1 = Claude | partial (`neuros-ctl agent`; mock-agent; real Claude Code not baked yet) |
+| big text: thin FIGlet Standard on the gradient | accepted as-is (user: "лучше старое") |
 
 ## Overall
 
