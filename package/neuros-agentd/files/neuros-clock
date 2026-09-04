@@ -1,0 +1,19 @@
+#!/bin/sh
+# Push the top-strip line (time / date / battery) to the compositor every ~20s.
+set -u
+
+battery() {
+	for d in /sys/class/power_supply/*/capacity; do
+		[ -r "$d" ] || continue
+		cap=$(cat "$d" 2>/dev/null) || continue
+		s=$(cat "$(dirname "$d")/status" 2>/dev/null)
+		[ "$s" = "Charging" ] && cap="${cap}+"
+		printf '     BAT %s%%' "$cap"
+		return
+	done
+}
+
+while :; do
+	neuros-ctl strip "$(date '+%H:%M     %a %d %b')$(battery)" 2>/dev/null || true
+	sleep 20
+done

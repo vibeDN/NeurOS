@@ -42,6 +42,8 @@ wlroots        = dependency('wlroots-0.19', fallback: ['wlroots', 'wlroots'])
 wayland_protos = dependency('wayland-protocols', version: '>=1.14')
 wayland_server = dependency('wayland-server')
 xkbcommon      = dependency('xkbcommon')
+fcft           = dependency('fcft')
+pixman         = dependency('pixman-1')
 math           = cc.find_library('m')
 
 wl_protocol_dir = wayland_protos.get_variable('pkgdatadir')
@@ -121,6 +123,7 @@ cage_sources = [
   'output.c',
   'seat.c',
   'shell.c',
+  'textbuf.c',
   'view.c',
   'xdg_shell.c',
 ]
@@ -136,6 +139,7 @@ cage_headers = [
   'seat.h',
   'server.h',
   'shell.h',
+  'textbuf.h',
   'view.h',
   'xdg_shell.h',
 ]
@@ -153,6 +157,8 @@ executable(
     wayland_server,
     wlroots,
     xkbcommon,
+    fcft,
+    pixman,
     math,
   ],
   install: true,

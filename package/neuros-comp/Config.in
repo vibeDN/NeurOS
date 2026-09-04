@@ -9,6 +9,9 @@ config BR2_PACKAGE_NEUROS_COMP
 	select BR2_PACKAGE_WAYLAND
 	select BR2_PACKAGE_WAYLAND_PROTOCOLS
 	select BR2_PACKAGE_LIBXKBCOMMON
+	select BR2_PACKAGE_FCFT
+	select BR2_PACKAGE_PIXMAN
+	select BR2_PACKAGE_FONTCONFIG
 	help
 	  The NeurOS Wayland compositor: a fork of cage (the kiosk
 	  compositor), base v0.2.1. Draws the 4-zone NeurOS shell -

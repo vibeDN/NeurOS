@@ -65,6 +65,8 @@ handle_line(struct ng_ipc *ipc, char *line)
 		ng_shell_set_agent(shell, arg);
 	} else if (strcmp(line, "status") == 0 && arg) {
 		ng_shell_set_status(shell, arg);
+	} else if (strcmp(line, "strip") == 0) {
+		ng_shell_set_strip(shell, arg ? arg : "");
 	} else if (strcmp(line, "colors") == 0 && arg) {
 		char *sp = strchr(arg, ' ');
 		float top[4], bot[4];

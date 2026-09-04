@@ -14,16 +14,20 @@
 
 #include <stdlib.h>
 #include <string.h>
+#include <fcft/fcft.h>
+#include <wlr/types/wlr_buffer.h>
 #include <wlr/types/wlr_scene.h>
 #include <wlr/util/log.h>
 
 #include "figlet.h"
 #include "server.h"
 #include "shell.h"
+#include "textbuf.h"
 
 static const float FRAME_COLOR[4] = {0.04f, 0.04f, 0.04f, 1.0f};  /* border */
 static const float PANE_TINT[4] = {0.0f, 0.0f, 0.0f, 0.22f};      /* wash */
 static const float TEXT_COLOR[4] = {0.05f, 0.05f, 0.05f, 1.0f};
+static const float STRIP_COLOR[4] = {0.06f, 0.06f, 0.06f, 0.92f}; /* strip mono */
 
 /* default wallpaper = Claude accent -> darker shade */
 static const float DEFAULT_TOP[4] = {0.851f, 0.463f, 0.341f, 1.0f};
@@ -179,6 +183,16 @@ ng_shell_create(struct cg_server *server)
 	textblock_set_text(&shell->agent, "NeurOS");
 	textblock_set_text(&shell->status, "Idle");
 
+	static bool fcft_ready = false;
+	if (!fcft_ready) {
+		fcft_ready = fcft_init(FCFT_LOG_COLORIZE_NEVER, false, FCFT_LOG_CLASS_ERROR);
+	}
+	const char *names[] = {"monospace"};
+	shell->strip_font = fcft_from_name(1, names, "size=13");
+	if (!shell->strip_font)
+		wlr_log(WLR_ERROR, "ng_shell: no monospace font (strip text disabled)");
+	shell->strip_node = wlr_scene_buffer_create(shell->tree, NULL);
+
 	ng_shell_set_colors(shell, DEFAULT_TOP, DEFAULT_BOTTOM);
 
 	wlr_log(WLR_INFO, "ng_shell: created");
@@ -194,6 +208,9 @@ ng_shell_destroy(struct ng_shell *shell)
 	textblock_clear(&shell->status);
 	free(shell->agent.text);
 	free(shell->status.text);
+	free(shell->strip_text);
+	if (shell->strip_font)
+		fcft_destroy(shell->strip_font);
 	if (shell->font)
 		flf_free(shell->font);
 	if (shell->tree)
@@ -228,6 +245,37 @@ ng_shell_set_status(struct ng_shell *shell, const char *state)
 	textblock_render(&shell->status, shell->font, &shell->bottom_box);
 }
 
+/* left-align the strip buffer, vertically centred in strip_box */
+static void
+strip_reposition(struct ng_shell *shell)
+{
+	if (!shell->strip_node || !shell->strip_node->buffer)
+		return;
+	int bh = shell->strip_node->buffer->height;
+	int y = shell->strip_box.y + (shell->strip_box.height - bh) / 2;
+	wlr_scene_node_set_position(&shell->strip_node->node, shell->strip_box.x, y < shell->strip_box.y ? shell->strip_box.y : y);
+}
+
+void
+ng_shell_set_strip(struct ng_shell *shell, const char *text)
+{
+	free(shell->strip_text);
+	shell->strip_text = text ? strdup(text) : NULL;
+
+	if (!shell->strip_node)
+		return;
+	if (!shell->strip_font || !shell->strip_text || !shell->strip_text[0]) {
+		wlr_scene_buffer_set_buffer(shell->strip_node, NULL);
+		return;
+	}
+
+	struct wlr_buffer *buf = ng_text_render(shell->strip_font, shell->strip_text, STRIP_COLOR, NULL, NULL);
+	wlr_scene_buffer_set_buffer(shell->strip_node, buf);
+	if (buf)
+		wlr_buffer_drop(buf);
+	strip_reposition(shell);
+}
+
 void
 ng_shell_layout(struct ng_shell *shell, int width, int height)
 {
@@ -249,9 +297,9 @@ ng_shell_layout(struct ng_shell *shell, int width, int height)
 	if (shell->frame_t > 26)
 		shell->frame_t = 26;
 
-	int strip_h = height * 3 / 100;
-	if (strip_h < 16)
-		strip_h = 16;
+	int strip_h = height * 4 / 100;
+	if (strip_h < 22)
+		strip_h = 22;
 	int top_h = height * 15 / 100;
 	int bottom_h = height * 15 / 100;
 
@@ -278,6 +326,7 @@ ng_shell_layout(struct ng_shell *shell, int width, int height)
 
 	textblock_render(&shell->agent, shell->font, &shell->top_box);
 	textblock_render(&shell->status, shell->font, &shell->bottom_box);
+	strip_reposition(shell);
 
 	wlr_log(WLR_INFO, "ng_shell: layout %dx%d, centre pane %d,%d %dx%d", width, height, shell->center_box.x,
 		shell->center_box.y, shell->center_box.width, shell->center_box.height);

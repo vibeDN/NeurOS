@@ -16,7 +16,10 @@ NEUROS_COMP_DEPENDENCIES = \
 	wlroots \
 	wayland \
 	wayland-protocols \
-	libxkbcommon
+	libxkbcommon \
+	fcft \
+	pixman \
+	fontconfig
 
 NEUROS_COMP_CONF_OPTS = -Dman-pages=disabled
 
