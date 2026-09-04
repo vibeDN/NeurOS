@@ -1,5 +1,7 @@
 #!/bin/sh
-# Push the top-strip line (time / date / battery) to the compositor every ~20s.
+# Push the top-strip lines to the compositor every ~20s:
+#   strip        left  - HH:MM  + date
+#   strip_right  right - battery
 set -u
 
 SOCK="${XDG_RUNTIME_DIR:-/run/user/0}/neuros-comp.sock"
@@ -15,12 +17,14 @@ battery() {
 		cap=$(cat "$d" 2>/dev/null) || continue
 		s=$(cat "$(dirname "$d")/status" 2>/dev/null)
 		[ "$s" = "Charging" ] && cap="${cap}+"
-		printf '     BAT %s%%' "$cap"
+		echo "BAT ${cap}%"
 		return
 	done
 }
 
 while :; do
-	neuros-ctl strip "$(date '+%H:%M     %a %d %b')$(battery)" 2>/dev/null || true
+	neuros-ctl strip "$(date '+%H:%M     %a %d %b')" 2>/dev/null || true
+	bat=$(battery)
+	[ -n "$bat" ] && neuros-ctl strip_right "$bat" 2>/dev/null || true
 	sleep 20
 done

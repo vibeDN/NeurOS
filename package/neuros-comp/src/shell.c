@@ -192,6 +192,7 @@ ng_shell_create(struct cg_server *server)
 	if (!shell->strip_font)
 		wlr_log(WLR_ERROR, "ng_shell: no monospace font (strip text disabled)");
 	shell->strip_node = wlr_scene_buffer_create(shell->tree, NULL);
+	shell->strip_right_node = wlr_scene_buffer_create(shell->tree, NULL);
 	shell->activity_node = wlr_scene_buffer_create(shell->tree, NULL);
 
 	ng_shell_set_colors(shell, DEFAULT_TOP, DEFAULT_BOTTOM);
@@ -210,6 +211,7 @@ ng_shell_destroy(struct ng_shell *shell)
 	free(shell->agent.text);
 	free(shell->status.text);
 	free(shell->strip_text);
+	free(shell->strip_right_text);
 	free(shell->activity_text);
 	if (shell->strip_font)
 		fcft_destroy(shell->strip_font);
@@ -278,6 +280,37 @@ ng_shell_set_strip(struct ng_shell *shell, const char *text)
 	strip_reposition(shell);
 }
 
+static void
+strip_right_reposition(struct ng_shell *shell)
+{
+	if (!shell->strip_right_node || !shell->strip_right_node->buffer)
+		return;
+	int bw = shell->strip_right_node->buffer->width;
+	int bh = shell->strip_right_node->buffer->height;
+	int x = shell->strip_box.x + shell->strip_box.width - bw;
+	int y = shell->strip_box.y + (shell->strip_box.height - bh) / 2;
+	wlr_scene_node_set_position(&shell->strip_right_node->node, x, y < shell->strip_box.y ? shell->strip_box.y : y);
+}
+
+void
+ng_shell_set_strip_right(struct ng_shell *shell, const char *text)
+{
+	free(shell->strip_right_text);
+	shell->strip_right_text = text ? strdup(text) : NULL;
+
+	if (!shell->strip_right_node)
+		return;
+	if (!shell->strip_font || !shell->strip_right_text || !shell->strip_right_text[0]) {
+		wlr_scene_buffer_set_buffer(shell->strip_right_node, NULL);
+		return;
+	}
+	struct wlr_buffer *buf = ng_text_render(shell->strip_font, shell->strip_right_text, STRIP_COLOR, NULL, NULL);
+	wlr_scene_buffer_set_buffer(shell->strip_right_node, buf);
+	if (buf)
+		wlr_buffer_drop(buf);
+	strip_right_reposition(shell);
+}
+
 /* centre the activity sub-line horizontally, just below the bottom pane's box */
 static void
 activity_reposition(struct ng_shell *shell)
@@ -287,7 +320,10 @@ activity_reposition(struct ng_shell *shell)
 	int bw = shell->activity_node->buffer->width;
 	int bh = shell->activity_node->buffer->height;
 	int x = shell->bottom_box.x + (shell->bottom_box.width - bw) / 2;
-	int y = shell->bottom_box.y + shell->bottom_box.height - bh - NG_FRAME_PX - 4;
+	/* centre it in the lower 28% band reserved in ng_shell_layout */
+	int band_top = shell->bottom_box.y + shell->bottom_box.height * 72 / 100;
+	int band_h = shell->bottom_box.y + shell->bottom_box.height - shell->frame_t - band_top;
+	int y = band_top + (band_h - bh) / 2;
 	wlr_scene_node_set_position(&shell->activity_node->node, x, y);
 }
 
@@ -359,8 +395,12 @@ ng_shell_layout(struct ng_shell *shell, int width, int height)
 	frame_place(&shell->bottom_frame, &shell->bottom_box, shell->frame_t);
 
 	textblock_render(&shell->agent, shell->font, &shell->top_box);
-	textblock_render(&shell->status, shell->font, &shell->bottom_box);
+	/* leave the lower ~28% of the bottom pane for the activity sub-line */
+	struct wlr_box status_box = shell->bottom_box;
+	status_box.height = status_box.height * 72 / 100;
+	textblock_render(&shell->status, shell->font, &status_box);
 	strip_reposition(shell);
+	strip_right_reposition(shell);
 	activity_reposition(shell);
 
 	wlr_log(WLR_INFO, "ng_shell: layout %dx%d, centre pane %d,%d %dx%d", width, height, shell->center_box.x,

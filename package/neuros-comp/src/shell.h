@@ -48,8 +48,10 @@ struct ng_shell {
 
 	/* small mono text via fcft: top strip (clock) + bottom activity sub-line */
 	struct fcft_font *strip_font;
-	struct wlr_scene_buffer *strip_node;
+	struct wlr_scene_buffer *strip_node;       /* left: clock / date */
 	char *strip_text;
+	struct wlr_scene_buffer *strip_right_node; /* right: battery */
+	char *strip_right_text;
 	struct wlr_scene_buffer *activity_node;
 	char *activity_text;
 
@@ -72,8 +74,9 @@ void ng_shell_set_colors(struct ng_shell *shell, const float top[4], const float
 void ng_shell_set_agent(struct ng_shell *shell, const char *name);
 void ng_shell_set_status(struct ng_shell *shell, const char *state);
 
-/* Small mono text: top strip (clock/date/battery), bottom activity sub-line. */
+/* Small mono text: top strip (left clock/date, right battery) + activity line. */
 void ng_shell_set_strip(struct ng_shell *shell, const char *text);
+void ng_shell_set_strip_right(struct ng_shell *shell, const char *text);
 void ng_shell_set_activity(struct ng_shell *shell, const char *text);
 
 #endif
