@@ -29,6 +29,7 @@ BR2_TARGET_ENABLE_ROOT_LOGIN=y
 
 # Rootfs overlay (branding, autologin drop-ins, networkd config)
 BR2_ROOTFS_OVERLAY="$(BR2_EXTERNAL_NEUROS_PATH)/overlay"
+BR2_ROOTFS_USERS_TABLES="$(BR2_EXTERNAL_NEUROS_PATH)/board/neuros/x86_64/users.table"
 BR2_ROOTFS_POST_BUILD_SCRIPT="$(BR2_EXTERNAL_NEUROS_PATH)/board/neuros/x86_64/post-build.sh"
 BR2_ROOTFS_POST_IMAGE_SCRIPT="$(BR2_EXTERNAL_NEUROS_PATH)/board/neuros/x86_64/post-image.sh"
 

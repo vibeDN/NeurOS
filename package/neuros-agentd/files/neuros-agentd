@@ -12,6 +12,8 @@ CONF=/etc/neuros/agentd.conf
 [ -r "$CONF" ] && . "$CONF"
 : "${AGENT_NAME:=Agent}"
 : "${AGENT_CMD:=/usr/lib/neuros/mock-agent}"
+: "${AGENT_USER:=}"
+: "${AGENT_WORKDIR:=/root}"
 : "${TMUX_SESSION:=agent}"
 
 RT="${XDG_RUNTIME_DIR:-/run/user/0}/neuros"
@@ -25,9 +27,17 @@ log() { echo "[agentd] $*" >&2; }
 
 # 1. create the agent session immediately - neuros-session is waiting on it
 if ! tmux has-session -t "$TMUX_SESSION" 2>/dev/null; then
-	log "starting agent: $AGENT_CMD (cwd $AGENT_WORKDIR)"
-	mkdir -p "$AGENT_WORKDIR"
-	tmux new-session -d -s "$TMUX_SESSION" -x 220 -y 50 -c "$AGENT_WORKDIR" "$AGENT_CMD"
+	# drop privileges to AGENT_USER when set and we're root; else run in place.
+	# (AGENT_WORKDIR / AGENT_CMD are simple tokens - no spaces - so no quoting.)
+	if [ -n "$AGENT_USER" ] && [ "$(id -u)" = 0 ] && id "$AGENT_USER" >/dev/null 2>&1; then
+		log "starting agent: $AGENT_CMD as $AGENT_USER (cwd $AGENT_WORKDIR)"
+		AGENT_LAUNCH="su -s /bin/sh $AGENT_USER -c 'cd $AGENT_WORKDIR && exec $AGENT_CMD'"
+	else
+		log "starting agent: $AGENT_CMD (cwd $AGENT_WORKDIR)"
+		mkdir -p "$AGENT_WORKDIR"
+		AGENT_LAUNCH="$AGENT_CMD"
+	fi
+	tmux new-session -d -s "$TMUX_SESSION" -x 220 -y 50 -c "$AGENT_WORKDIR" "$AGENT_LAUNCH"
 	tmux set-option -t "$TMUX_SESSION" status off
 fi
 

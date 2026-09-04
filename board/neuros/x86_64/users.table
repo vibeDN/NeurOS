@@ -1,0 +1,8 @@
+# NeurOS users  (Buildroot BR2_ROOTFS_USERS_TABLES format:
+#   username uid group gid password home shell groups comment)
+#
+# The agent CLI runs as an unprivileged user, not root - so Claude Code can use
+# bypassPermissions (refused under root) and each agent gets an isolated
+# /home/<agent>/memory/ tree. neuros-agentd (root) still orchestrates and drives
+# the compositor IPC; only the CLI itself drops privileges.
+claude 1000 claude 1000 ! /home/claude /bin/sh - NeurOS agent (Claude)

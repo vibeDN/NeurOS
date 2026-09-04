@@ -28,38 +28,63 @@ if [ -x "$TARGET_DIR/usr/bin/fish" ]; then
 		"$TARGET_DIR/etc/passwd"
 fi
 
+# --- agent user (claude) home + Claude Code provisioning --------------------
+# The agent CLI runs as the unprivileged `claude` user (uid 1000, users.table).
+# mkusers runs AFTER this script and chown -R's /home/claude to 1000:1000, so we
+# just lay the files down here.
+AGENT_HOME="$TARGET_DIR/home/claude"
+NEUROS_DIR="${BR2_EXTERNAL_NEUROS_PATH:-$BOARD_DIR/../../..}"
+
+# mandatory per-agent memory prompt -> ~/.claude/CLAUDE.md (user-global memory);
+# <agent> is substituted for this user.
+install -d -m 0755 "$AGENT_HOME/.claude"
+install -d -m 0755 "$AGENT_HOME/memory/you" "$AGENT_HOME/memory/topics" "$AGENT_HOME/memory/area"
+if [ -f "$NEUROS_DIR/docs/agent-memory-prompt.md" ]; then
+	sed -n '/^## Memory$/,/^## Implementation notes/p' "$NEUROS_DIR/docs/agent-memory-prompt.md" \
+		| sed '/^## Implementation notes/d; s#/home/<agent>/#/home/claude/#g' \
+		> "$AGENT_HOME/.claude/CLAUDE.md"
+fi
+
 # Claude Code auth (DEV ONLY): bake the build host's OAuth credentials so the
 # agent works out of the box. Secret - never committed; sourced straight from
 # $HOME. Skip cleanly if absent (CI / another machine).
 if [ -x "$TARGET_DIR/opt/claude-code/claude" ] && [ -f "$HOME/.claude/.credentials.json" ]; then
-	install -d -m 0700 "$TARGET_DIR/root/.claude"
-	install -m 0600 "$HOME/.claude/.credentials.json" "$TARGET_DIR/root/.claude/.credentials.json"
-	# minimal state so the CLI skips first-run onboarding
-	cat > "$TARGET_DIR/root/.claude.json" <<-'EOF'
+	for h in "$AGENT_HOME" "$TARGET_DIR/root"; do
+		if [ "$h" = "$TARGET_DIR/root" ]; then dir=/root; bypass=false; else dir=/home/claude; bypass=true; fi
+		install -d -m 0700 "$h/.claude"
+		install -m 0600 "$HOME/.claude/.credentials.json" "$h/.claude/.credentials.json"
+		cat > "$h/.claude.json" <<-EOF
+		{
+		  "hasCompletedOnboarding": true,
+		  "autoUpdates": false,
+		  "autoUpdatesProtectedForNative": true,
+		  "bypassPermissionsModeAccepted": $bypass,
+		  "theme": "dark",
+		  "projects": {
+		    "$dir": {
+		      "hasTrustDialogAccepted": true,
+		      "hasClaudeMdExternalIncludesApproved": true,
+		      "hasClaudeMdExternalIncludesWarningShown": true,
+		      "allowedTools": []
+		    }
+		  }
+		}
+		EOF
+		chmod 0600 "$h/.claude.json"
+	done
+	# agent (non-root): bypassPermissions is fine -> fully autonomous voice flow
+	cat > "$AGENT_HOME/.claude/settings.json" <<-'EOF'
 	{
-	  "hasCompletedOnboarding": true,
-	  "autoUpdates": false,
-	  "autoUpdatesProtectedForNative": true,
-	  "theme": "dark",
-	  "projects": {
-	    "/root": {
-	      "hasTrustDialogAccepted": true,
-	      "hasClaudeMdExternalIncludesApproved": true,
-	      "hasClaudeMdExternalIncludesWarningShown": true,
-	      "allowedTools": []
-	    }
-	  }
+	  "permissions": { "defaultMode": "bypassPermissions" },
+	  "includeCoAuthoredBy": false
 	}
 	EOF
-	chmod 0600 "$TARGET_DIR/root/.claude.json"
-	# autonomous voice agent: minimise prompts. bypassPermissions / --dangerously-
-	# skip-permissions are refused as root, so use acceptEdits until the agent
-	# runs as a dedicated non-root user (TODO).
+	# root (for manual `claude` over ssh): bypass is refused as root -> acceptEdits
 	cat > "$TARGET_DIR/root/.claude/settings.json" <<-'EOF'
 	{
 	  "permissions": { "defaultMode": "acceptEdits" },
 	  "includeCoAuthoredBy": false
 	}
 	EOF
-	chmod 0600 "$TARGET_DIR/root/.claude/settings.json"
+	chmod 0600 "$AGENT_HOME/.claude/settings.json" "$TARGET_DIR/root/.claude/settings.json"
 fi
