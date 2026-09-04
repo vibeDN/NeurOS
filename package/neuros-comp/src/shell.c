@@ -107,7 +107,7 @@ textblock_render(struct ng_textblock *tb, const struct flf_font *font, const str
 		return;
 
 	/* cell size: fit the rendered grid into the box (~78%), keep square cells */
-	int cw = (box->width * 78 / 100) / (r->cols > 0 ? r->cols : 1);
+	int cw = (box->width * 64 / 100) / (r->cols > 0 ? r->cols : 1);
 	int ch = (box->height * 78 / 100) / (r->rows > 0 ? r->rows : 1);
 	int cell = cw < ch ? cw : ch;
 	if (cell < 1)
@@ -321,7 +321,7 @@ activity_reposition(struct ng_shell *shell)
 	int bh = shell->activity_node->buffer->height;
 	int x = shell->bottom_box.x + (shell->bottom_box.width - bw) / 2;
 	/* centre it in the lower 28% band reserved in ng_shell_layout */
-	int band_top = shell->bottom_box.y + shell->bottom_box.height * 72 / 100;
+	int band_top = shell->bottom_box.y + shell->bottom_box.height * 66 / 100;
 	int band_h = shell->bottom_box.y + shell->bottom_box.height - shell->frame_t - band_top;
 	int y = band_top + (band_h - bh) / 2;
 	wlr_scene_node_set_position(&shell->activity_node->node, x, y);
@@ -370,8 +370,8 @@ ng_shell_layout(struct ng_shell *shell, int width, int height)
 	int strip_h = height * 4 / 100;
 	if (strip_h < 22)
 		strip_h = 22;
-	int top_h = height * 15 / 100;
-	int bottom_h = height * 15 / 100;
+	int top_h = height * 16 / 100;
+	int bottom_h = height * 17 / 100;
 
 	int x = margin;
 	int w = width - 2 * margin;
@@ -397,7 +397,7 @@ ng_shell_layout(struct ng_shell *shell, int width, int height)
 	textblock_render(&shell->agent, shell->font, &shell->top_box);
 	/* leave the lower ~28% of the bottom pane for the activity sub-line */
 	struct wlr_box status_box = shell->bottom_box;
-	status_box.height = status_box.height * 72 / 100;
+	status_box.height = status_box.height * 66 / 100;
 	textblock_render(&shell->status, shell->font, &status_box);
 	strip_reposition(shell);
 	strip_right_reposition(shell);
