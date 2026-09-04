@@ -31,16 +31,24 @@ struct ng_shell {
 	float top_color[4];
 	float bottom_color[4];
 
-	struct ng_frame {
-		struct wlr_scene_rect *tint;    /* subtle dark wash over the wallpaper */
-		struct wlr_scene_rect *edge[4]; /* top, bottom, left, right border */
-	} top_frame, center_frame, bottom_frame;
+	/* frosted-glass panels (rounded-rect pixman buffers) */
+	struct wlr_scene_buffer *top_panel;
+	struct wlr_scene_buffer *center_panel;
+	struct wlr_scene_buffer *bottom_panel;
 
-	/* big FIGlet block text (rendered via fcft, scaled to the pane) */
+	/* big text (Doto via fcft, scaled to the pane) */
 	struct wlr_scene_buffer *agent_node;
 	char *agent_text;
 	struct wlr_scene_buffer *status_node;
 	char *status_text;
+	struct wlr_scene_buffer *model_node; /* model-name pill */
+	char *model_text;
+
+	/* 6-agent scaffold dots */
+	struct wlr_scene_buffer *dot[6];
+	int active_dot;
+
+	struct wlr_scene_buffer *home_node; /* home indicator bar */
 
 	/* small mono text via fcft: top strip (clock) + bottom activity sub-line */
 	struct fcft_font *strip_font;
@@ -66,9 +74,10 @@ void ng_shell_destroy(struct ng_shell *shell);
 void ng_shell_layout(struct ng_shell *shell, int width, int height);
 void ng_shell_set_colors(struct ng_shell *shell, const float top[4], const float bottom[4]);
 
-/* Big block text in the top / bottom panes. Re-rendered immediately. */
+/* Big Doto text in the top / bottom panes. */
 void ng_shell_set_agent(struct ng_shell *shell, const char *name);
 void ng_shell_set_status(struct ng_shell *shell, const char *state);
+void ng_shell_set_model(struct ng_shell *shell, const char *model);
 
 /* Small mono text: top strip (left clock/date, right battery) + activity line. */
 void ng_shell_set_strip(struct ng_shell *shell, const char *text);

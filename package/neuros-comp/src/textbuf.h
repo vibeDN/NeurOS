@@ -14,4 +14,20 @@ struct wlr_buffer;
 struct wlr_buffer *ng_text_render(struct fcft_font *font, const char *utf8, const float color[4], int *out_w,
 				  int *out_h);
 
+/* Frosted-glass panel: rounded rect (radius `rad`), faint top->bottom white fill
+ * gradient, ~1.5px lighter border, inset top highlight. `dark` != 0 fills a
+ * darker translucent centre (the chat pane). Buffer is premultiplied ARGB. */
+struct wlr_buffer *ng_panel_render(int w, int h, int rad, int dark);
+
+/* Filled rounded rect of one straight-alpha `color` (pills, home indicator). */
+struct wlr_buffer *ng_pill_render(int w, int h, int rad, const float color[4]);
+
+/* A pill (`pillcol`) with `text` centred in `font`/`textcol`, `padx`/`pady`
+ * around the text. Returns a wlr_buffer or NULL. */
+struct wlr_buffer *ng_pill_text_render(struct fcft_font *font, const char *text, const float textcol[4],
+				       const float pillcol[4], int padx, int pady);
+
+/* Filled circle of `color`; if `ring` > 0, a `ring`-px outline in `ringcol`. */
+struct wlr_buffer *ng_dot_render(int d, const float color[4], int ring, const float ringcol[4]);
+
 #endif

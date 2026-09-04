@@ -7,6 +7,7 @@
  */
 #define _POSIX_C_SOURCE 200809L
 
+#include <math.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -188,4 +189,223 @@ ng_text_render(struct fcft_font *font, const char *utf8, const float color[4], i
 	if (out_h)
 		*out_h = height;
 	return &t->base;
+}
+
+/* -- shape helpers (glass panels, pills, dots) ------------------------- */
+
+static uint32_t
+premul(float r, float g, float b, float a)
+{
+	if (a < 0)
+		a = 0;
+	if (a > 1)
+		a = 1;
+	uint32_t A = (uint32_t) (a * 255 + 0.5f);
+	uint32_t R = (uint32_t) (r * a * 255 + 0.5f);
+	uint32_t G = (uint32_t) (g * a * 255 + 0.5f);
+	uint32_t B = (uint32_t) (b * a * 255 + 0.5f);
+	return (A << 24) | (R << 16) | (G << 8) | B;
+}
+
+static struct wlr_buffer *
+buf_from_data(uint32_t *data, int w, int h)
+{
+	struct ng_tbuf *t = calloc(1, sizeof(*t));
+	if (!t) {
+		free(data);
+		return NULL;
+	}
+	wlr_buffer_init(&t->base, &tbuf_impl, w, h);
+	t->data = data;
+	t->stride = (size_t) w * 4;
+	return &t->base;
+}
+
+/* coverage 0..1 of pixel (px,py) inside a rounded rect [0,w]x[0,h] radius r,
+ * with a 1px antialiased edge */
+static float
+rr_cover(float px, float py, int w, int h, int r)
+{
+	float dx = 0, dy = 0;
+	if (px < r)
+		dx = r - px;
+	else if (px > w - r)
+		dx = px - (w - r);
+	if (py < r)
+		dy = r - py;
+	else if (py > h - r)
+		dy = py - (h - r);
+	if (dx == 0 && dy == 0)
+		return 1.0f;
+	float d = dx * dx + dy * dy;
+	float rr = (float) r * r;
+	if (d <= (r - 1) * (r - 1))
+		return 1.0f;
+	if (d >= rr)
+		return 0.0f;
+	return (rr - d) / (rr - (r - 1) * (r - 1));
+}
+
+struct wlr_buffer *
+ng_panel_render(int w, int h, int rad, int dark)
+{
+	if (w < 2 || h < 2)
+		return NULL;
+	if (rad > w / 2)
+		rad = w / 2;
+	if (rad > h / 2)
+		rad = h / 2;
+	if (rad < 1)
+		rad = 1;
+
+	uint32_t *data = calloc((size_t) w * h, 4);
+	if (!data)
+		return NULL;
+
+	const float border = 1.6f;
+	for (int y = 0; y < h; y++) {
+		float grad = (float) y / (h > 1 ? h - 1 : 1); /* 0 top .. 1 bottom */
+		float fill_a = dark ? (0.42f - 0.06f * grad) : (0.16f - 0.12f * grad);
+		float fill_l = dark ? 0.03f : 1.0f; /* near-black vs white */
+		for (int x = 0; x < w; x++) {
+			float cov = rr_cover(x + 0.5f, y + 0.5f, w, h, rad);
+			if (cov <= 0.0f)
+				continue;
+
+			/* distance from the rounded edge, for border + highlight */
+			float ex = x < w / 2 ? x + 0.5f : w - (x + 0.5f);
+			float ey = y < h / 2 ? y + 0.5f : h - (y + 0.5f);
+			float edge = ex < ey ? ex : ey;
+			/* rough radial edge in corners */
+			if (x < rad && y < rad) {
+				float ddx = rad - (x + 0.5f), ddy = rad - (y + 0.5f);
+				edge = rad - sqrtf(ddx * ddx + ddy * ddy);
+			}
+
+			float a = fill_a;
+			float l = fill_l;
+			if (edge < border) {
+				a = 0.30f;
+				l = 1.0f;
+			} else if (!dark && edge < border + 1.5f && y < h / 2) {
+				a = 0.22f; /* inset top highlight */
+				l = 1.0f;
+			}
+			data[(size_t) y * w + x] = premul(l, l, l, a * cov);
+		}
+	}
+	return buf_from_data(data, w, h);
+}
+
+struct wlr_buffer *
+ng_pill_render(int w, int h, int rad, const float color[4])
+{
+	if (w < 2 || h < 2)
+		return NULL;
+	if (rad > w / 2)
+		rad = w / 2;
+	if (rad > h / 2)
+		rad = h / 2;
+	if (rad < 1)
+		rad = 1;
+	uint32_t *data = calloc((size_t) w * h, 4);
+	if (!data)
+		return NULL;
+	for (int y = 0; y < h; y++)
+		for (int x = 0; x < w; x++) {
+			float cov = rr_cover(x + 0.5f, y + 0.5f, w, h, rad);
+			if (cov > 0.0f)
+				data[(size_t) y * w + x] = premul(color[0], color[1], color[2], color[3] * cov);
+		}
+	return buf_from_data(data, w, h);
+}
+
+struct wlr_buffer *
+ng_dot_render(int d, const float color[4], int ring, const float ringcol[4])
+{
+	if (d < 2)
+		return NULL;
+	uint32_t *data = calloc((size_t) d * d, 4);
+	if (!data)
+		return NULL;
+	float c = (d - 1) / 2.0f, rad = d / 2.0f;
+	for (int y = 0; y < d; y++)
+		for (int x = 0; x < d; x++) {
+			float dist = sqrtf((x - c) * (x - c) + (y - c) * (y - c));
+			float cov = rad - dist;
+			if (cov <= 0)
+				continue;
+			if (cov > 1)
+				cov = 1;
+			const float *col = color;
+			if (ring > 0 && dist > rad - ring)
+				col = ringcol;
+			data[(size_t) y * d + x] = premul(col[0], col[1], col[2], col[3] * cov);
+		}
+	return buf_from_data(data, d, d);
+}
+
+struct wlr_buffer *
+ng_pill_text_render(struct fcft_font *font, const char *text, const float textcol[4], const float pillcol[4],
+		    int padx, int pady)
+{
+	if (!font || !text || !text[0])
+		return NULL;
+
+	/* rasterise the text into a scratch pixman image first */
+	uint32_t cps[256];
+	size_t n = utf8_decode(text, cps, 256);
+	if (!n)
+		return NULL;
+	int tw = 0;
+	for (size_t i = 0; i < n; i++) {
+		const struct fcft_glyph *g = fcft_rasterize_char_utf32(font, cps[i], FCFT_SUBPIXEL_NONE);
+		if (g)
+			tw += g->advance.x;
+	}
+	int th = font->ascent + font->descent;
+	if (tw < 1 || th < 1)
+		return NULL;
+
+	int W = tw + 2 * padx, H = th + 2 * pady;
+	if (padx < 2)
+		W = tw + 8;
+	int rad = H / 2;
+
+	uint32_t *data = calloc((size_t) W * H, 4);
+	if (!data)
+		return NULL;
+
+	/* pill background */
+	for (int y = 0; y < H; y++)
+		for (int x = 0; x < W; x++) {
+			float cov = rr_cover(x + 0.5f, y + 0.5f, W, H, rad);
+			if (cov > 0.0f)
+				data[(size_t) y * W + x] =
+					premul(pillcol[0], pillcol[1], pillcol[2], pillcol[3] * cov);
+		}
+
+	/* text via pixman OVER */
+	pixman_image_t *dst = pixman_image_create_bits(PIXMAN_a8r8g8b8, W, H, data, (size_t) W * 4);
+	pixman_color_t pc = {
+		.red = (uint16_t) (textcol[0] * 0xffff),
+		.green = (uint16_t) (textcol[1] * 0xffff),
+		.blue = (uint16_t) (textcol[2] * 0xffff),
+		.alpha = (uint16_t) (textcol[3] * 0xffff),
+	};
+	pixman_image_t *src = pixman_image_create_solid_fill(&pc);
+	int pen = (W - tw) / 2, baseline = (H - th) / 2 + font->ascent;
+	for (size_t i = 0; i < n; i++) {
+		const struct fcft_glyph *g = fcft_rasterize_char_utf32(font, cps[i], FCFT_SUBPIXEL_NONE);
+		if (!g)
+			continue;
+		if (g->pix)
+			pixman_image_composite32(PIXMAN_OP_OVER, src, g->pix, dst, 0, 0, 0, 0, pen + g->x,
+						 baseline - g->y, g->width, g->height);
+		pen += g->advance.x;
+	}
+	pixman_image_unref(src);
+	pixman_image_unref(dst);
+
+	return buf_from_data(data, W, H);
 }
