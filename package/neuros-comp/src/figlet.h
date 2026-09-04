@@ -19,6 +19,7 @@ struct flf_font {
 	int height;
 	int baseline;
 	int max_len;
+	int layout; /* -1 full width, 0 kerning, >0 smush-rule bits */
 	char hardblank;
 	/* glyphs[c - FLF_FIRST] is an array of `height` NUL-terminated rows */
 	char **glyph[FLF_COUNT];
@@ -34,6 +35,10 @@ struct flf_render {
 struct flf_font *flf_load(const char *path);
 struct flf_font *flf_load_mem(const char *buf, size_t len);
 void flf_free(struct flf_font *f);
+
+/* Merged FIGlet art as one malloc'd string, rows joined by '\n'. Caller frees.
+ * For rendering the block text via a monospace font (fcft), not scene rects. */
+char *flf_render_string(const struct flf_font *f, const char *text);
 
 /* Render ASCII `text` (chars outside 32..126 become spaces). Caller frees via
  * flf_render_free(). Returns NULL on allocation failure. */

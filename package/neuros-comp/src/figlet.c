@@ -1,13 +1,15 @@
 /*
- * Minimal FIGlet .flf parser + renderer. See figlet.h. MIT.
+ * Minimal FIGlet .flf parser + renderer with horizontal kerning + smushing.
+ * See figlet.h. MIT.
  *
- * .flf layout:
- *   line 0:  "flf2a" <hardblank> <height> <baseline> <maxlen> <oldlayout>
- *            <comment_lines> [<print_dir> <full_layout> <codetag_count>]
- *   next <comment_lines> lines: free-text comment
- *   then, for codepoints 32..126 in order: <height> lines each, every line
- *   ending in one or more endmark chars; the last line of a glyph ends in two.
- *   (Code-tagged glyphs after that are ignored.)
+ * .flf header:  "flf2a" <hardblank> <height> <baseline> <maxlen> <oldlayout>
+ *               <comment_lines> [<print_dir> <full_layout> <codetag_count>]
+ * then <comment_lines> comment lines, then codepoints 32..126, <height> lines
+ * each, every line ending in one or more endmark chars (two on the last line).
+ *
+ * Layout: we do "kerning" (slide each glyph left until it touches) plus the
+ * smushing rules the Standard font uses (oldlayout 15 = equal | underscore |
+ * hierarchy | opposite-pair). Good enough to match `figlet` output closely.
  */
 #define _POSIX_C_SOURCE 200809L
 
@@ -18,13 +20,17 @@
 
 #include "figlet.h"
 
+/* smush rule bits (subset of the FIGlet layout mask) */
+#define SM_EQUAL 1
+#define SM_UNDERSCORE 2
+#define SM_HIERARCHY 4
+#define SM_PAIR 8
+
 struct reader {
 	const char *p;
 	const char *end;
 };
 
-/* copy one line (without the newline) into a freshly malloc'd NUL-terminated
- * string; advance past the newline. returns NULL at EOF. */
 static char *
 read_line(struct reader *r)
 {
@@ -33,7 +39,6 @@ read_line(struct reader *r)
 	const char *nl = memchr(r->p, '\n', (size_t) (r->end - r->p));
 	const char *stop = nl ? nl : r->end;
 	size_t n = (size_t) (stop - r->p);
-	/* trim a trailing CR */
 	if (n > 0 && r->p[n - 1] == '\r')
 		n--;
 	char *s = malloc(n + 1);
@@ -45,9 +50,6 @@ read_line(struct reader *r)
 	return s;
 }
 
-/* strip trailing endmark chars from a glyph row. FIGlet uses the last visible
- * char of the first row as the endmark; we just strip any run of the row's
- * final character (commonly '@'), and also a lone trailing run of '@'. */
 static void
 strip_endmarks(char *row)
 {
@@ -77,15 +79,19 @@ parse(struct reader *r)
 
 	const char *h = hdr + 5;
 	f->hardblank = *h ? *h : '$';
-	int comment_lines = 0;
-	/* height baseline maxlen oldlayout comment_lines ... */
-	if (sscanf(h + 1, "%d %d %d %*d %d", &f->height, &f->baseline, &f->max_len, &comment_lines) < 4 ||
+	int comment_lines = 0, old_layout = -1;
+	if (sscanf(h + 1, "%d %d %d %d %d", &f->height, &f->baseline, &f->max_len, &old_layout, &comment_lines) < 5 ||
 	    f->height <= 0 || f->height > 256) {
 		free(hdr);
 		free(f);
 		return NULL;
 	}
 	free(hdr);
+
+	if (old_layout < 0)
+		f->layout = -1; /* full width */
+	else
+		f->layout = old_layout; /* 0 = kerning, >0 = smush bits */
 
 	for (int i = 0; i < comment_lines; i++) {
 		char *c = read_line(r);
@@ -110,14 +116,10 @@ parse(struct reader *r)
 				return NULL;
 			}
 			strip_endmarks(line);
-			/* substitute hardblank -> space for layout */
-			for (char *q = line; *q; q++)
-				if (*q == f->hardblank)
-					*q = ' ';
 			int len = (int) strlen(line);
 			if (len > w)
 				w = len;
-			f->glyph[g][row] = line;
+			f->glyph[g][row] = line; /* hardblank kept for smush logic */
 		}
 		f->glyph_w[g] = w;
 	}
@@ -172,51 +174,239 @@ flf_free(struct flf_font *f)
 	free(f);
 }
 
+/* --- smushing --------------------------------------------------------- */
+
+static int
+hierarchy_rank(char c)
+{
+	switch (c) {
+	case '|':
+		return 1;
+	case '/':
+	case '\\':
+		return 2;
+	case '[':
+	case ']':
+		return 3;
+	case '{':
+	case '}':
+		return 4;
+	case '(':
+	case ')':
+		return 5;
+	case '<':
+	case '>':
+		return 6;
+	default:
+		return 0;
+	}
+}
+
+/* try to smush chars a (left) and b (right); return the merged char, or 0 */
+static char
+smush_chars(char a, char b, char hardblank, int rules)
+{
+	if (a == ' ')
+		return b;
+	if (b == ' ')
+		return a;
+
+	if (a == hardblank || b == hardblank)
+		return 0; /* leave hardblanks alone here */
+
+	if ((rules & SM_EQUAL) && a == b)
+		return a;
+
+	if (rules & SM_UNDERSCORE) {
+		const char *set = "|/\\[]{}()<>";
+		if (a == '_' && strchr(set, b))
+			return b;
+		if (b == '_' && strchr(set, a))
+			return a;
+	}
+
+	if (rules & SM_HIERARCHY) {
+		int ra = hierarchy_rank(a), rb = hierarchy_rank(b);
+		if (ra && rb && ra != rb)
+			return ra > rb ? a : b;
+	}
+
+	if (rules & SM_PAIR) {
+		if ((a == '[' && b == ']') || (a == ']' && b == '['))
+			return '|';
+		if ((a == '{' && b == '}') || (a == '}' && b == '{'))
+			return '|';
+		if ((a == '(' && b == ')') || (a == ')' && b == '('))
+			return '|';
+	}
+
+	return 0;
+}
+
+/* Compose the FIGlet art for `text` into H NUL-terminated rows, each padded to
+ * *out_w with spaces (hardblank -> space). Caller frees the rows + array. */
+static char **
+render_rows(const struct flf_font *f, const char *text, int *out_w)
+{
+	int H = f->height;
+	size_t tlen = strlen(text);
+
+	/* each output row is a fixed-width [cap] char array, space-filled to cur_w */
+	int cap = 8 + (int) tlen * (f->max_len + 2);
+	char **row = calloc(H, sizeof(char *));
+	if (!row)
+		return NULL;
+	for (int r = 0; r < H; r++) {
+		row[r] = malloc((size_t) cap);
+		if (!row[r]) {
+			for (int k = 0; k < r; k++)
+				free(row[k]);
+			free(row);
+			return NULL;
+		}
+		memset(row[r], ' ', (size_t) cap);
+	}
+	int cur_w = 0;
+
+	for (size_t i = 0; i < tlen; i++) {
+		int cp = (unsigned char) text[i];
+		if (cp < FLF_FIRST || cp > FLF_LAST)
+			cp = ' ';
+		int gi = cp - FLF_FIRST;
+		int gw = f->glyph_w[gi];
+		if (gw <= 0 || cur_w + gw + 2 >= cap)
+			continue;
+
+		/* glyph rows, space-padded to gw, hardblank->space */
+		char **gr = calloc(H, sizeof(char *));
+		for (int r = 0; r < H; r++) {
+			gr[r] = calloc((size_t) gw + 1, 1);
+			const char *src = f->glyph[gi][r];
+			int sl = (int) strlen(src);
+			for (int x = 0; x < gw; x++) {
+				char c = x < sl ? src[x] : ' ';
+				gr[r][x] = (c == f->hardblank) ? ' ' : c;
+			}
+		}
+
+		/* classic FIGlet smushamount: per row, (blank slack) + at most one
+		 * smushable column; overlap = min over rows */
+		int overlap = 0;
+		if (cur_w > 0 && f->layout >= 0) {
+			overlap = gw < cur_w ? gw : cur_w;
+			for (int r = 0; r < H; r++) {
+				int tr = 0;
+				while (tr < cur_w && row[r][cur_w - 1 - tr] == ' ')
+					tr++;
+				int lr = 0;
+				while (lr < gw && gr[r][lr] == ' ')
+					lr++;
+				int amt = tr + lr;
+				int li = cur_w - tr - 1; /* left's last ink */
+				int ri = lr;             /* right's first ink */
+				if (f->layout > 0 && li >= 0 && ri < gw &&
+				    smush_chars(row[r][li], gr[r][ri], f->hardblank, f->layout))
+					amt += 1;
+				if (amt < overlap)
+					overlap = amt;
+			}
+			if (overlap < 0)
+				overlap = 0;
+		}
+
+		int start = cur_w - overlap;
+		for (int r = 0; r < H; r++) {
+			for (int x = 0; x < gw; x++) {
+				char c = gr[r][x];
+				if (c == ' ')
+					continue;
+				int col = start + x;
+				char cur = row[r][col];
+				if (cur == ' ' || col >= cur_w) {
+					row[r][col] = c;
+				} else {
+					char m = smush_chars(cur, c, f->hardblank, f->layout);
+					row[r][col] = m ? m : c;
+				}
+			}
+		}
+		if (start + gw > cur_w)
+			cur_w = start + gw;
+
+		for (int r = 0; r < H; r++)
+			free(gr[r]);
+		free(gr);
+	}
+
+	if (cur_w < 1)
+		cur_w = 1;
+	for (int r = 0; r < H; r++)
+		row[r][cur_w] = '\0';
+	*out_w = cur_w;
+	return row;
+}
+
 struct flf_render *
 flf_render_text(const struct flf_font *f, const char *text)
 {
-	size_t tlen = strlen(text);
-
-	int cols = 0;
-	for (size_t i = 0; i < tlen; i++) {
-		int c = (unsigned char) text[i];
-		if (c < FLF_FIRST || c > FLF_LAST)
-			c = ' ';
-		cols += f->glyph_w[c - FLF_FIRST];
-	}
-	if (cols <= 0)
-		cols = 1;
+	int H = f->height, cur_w = 0;
+	char **row = render_rows(f, text, &cur_w);
+	if (!row)
+		return NULL;
 
 	struct flf_render *out = calloc(1, sizeof(*out));
-	if (!out)
-		return NULL;
-	out->rows = f->height;
-	out->cols = cols;
-	out->cell = calloc((size_t) out->rows * cols, 1);
-	if (!out->cell) {
-		free(out);
-		return NULL;
-	}
-
-	int xoff = 0;
-	for (size_t i = 0; i < tlen; i++) {
-		int c = (unsigned char) text[i];
-		if (c < FLF_FIRST || c > FLF_LAST)
-			c = ' ';
-		int gi = c - FLF_FIRST;
-		int gw = f->glyph_w[gi];
-		for (int row = 0; row < f->height; row++) {
-			const char *src = f->glyph[gi][row];
-			int slen = (int) strlen(src);
-			for (int x = 0; x < slen && x < gw; x++) {
-				if (src[x] != ' ')
-					out->cell[(size_t) row * cols + xoff + x] = 1;
-			}
+	if (out) {
+		out->rows = H;
+		out->cols = cur_w;
+		out->cell = calloc((size_t) H * cur_w, 1);
+		if (!out->cell) {
+			free(out);
+			out = NULL;
+		} else {
+			for (int r = 0; r < H; r++)
+				for (int x = 0; x < cur_w; x++) {
+					char c = row[r][x];
+					if (c != ' ' && c != '\0' && c != f->hardblank)
+						out->cell[(size_t) r * cur_w + x] = 1;
+				}
 		}
-		xoff += gw;
 	}
-
+	for (int r = 0; r < H; r++)
+		free(row[r]);
+	free(row);
 	return out;
+}
+
+/* Merged FIGlet art as one string, rows joined by '\n', no trailing blanks. */
+char *
+flf_render_string(const struct flf_font *f, const char *text)
+{
+	int H = f->height, w = 0;
+	char **row = render_rows(f, text, &w);
+	if (!row)
+		return NULL;
+
+	char *s = malloc((size_t) H * (w + 1) + 1);
+	if (!s) {
+		for (int r = 0; r < H; r++)
+			free(row[r]);
+		free(row);
+		return NULL;
+	}
+	size_t o = 0;
+	for (int r = 0; r < H; r++) {
+		int end = w;
+		while (end > 0 && (row[r][end - 1] == ' ' || row[r][end - 1] == f->hardblank))
+			end--;
+		for (int x = 0; x < end; x++)
+			s[o++] = row[r][x] == f->hardblank ? ' ' : row[r][x];
+		if (r < H - 1)
+			s[o++] = '\n';
+		free(row[r]);
+	}
+	s[o] = '\0';
+	free(row);
+	return s;
 }
 
 void

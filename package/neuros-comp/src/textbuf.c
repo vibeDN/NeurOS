@@ -93,25 +93,52 @@ utf8_decode(const char *s, uint32_t *cps, size_t cap)
 	return n;
 }
 
+/* width in px of one UTF-32 line */
+static int
+line_width(struct fcft_font *font, const uint32_t *cps, size_t n)
+{
+	int w = 0;
+	for (size_t i = 0; i < n; i++) {
+		const struct fcft_glyph *g = fcft_rasterize_char_utf32(font, cps[i], FCFT_SUBPIXEL_NONE);
+		if (g)
+			w += g->advance.x;
+	}
+	return w;
+}
+
 struct wlr_buffer *
 ng_text_render(struct fcft_font *font, const char *utf8, const float color[4], int *out_w, int *out_h)
 {
 	if (!font || !utf8 || !utf8[0])
 		return NULL;
 
-	uint32_t cps[256];
-	size_t n = utf8_decode(utf8, cps, 256);
-	if (n == 0)
+	/* decode, splitting into lines on '\n' */
+	uint32_t cps[4096];
+	size_t total = utf8_decode(utf8, cps, 4096);
+	if (total == 0)
 		return NULL;
 
-	/* measure */
-	int width = 0;
-	for (size_t i = 0; i < n; i++) {
-		const struct fcft_glyph *g = fcft_rasterize_char_utf32(font, cps[i], FCFT_SUBPIXEL_NONE);
-		if (g)
-			width += g->advance.x;
+	size_t lstart[64];
+	size_t llen[64];
+	int nlines = 0;
+	size_t s = 0;
+	for (size_t i = 0; i <= total && nlines < 64; i++) {
+		if (i == total || cps[i] == '\n') {
+			lstart[nlines] = s;
+			llen[nlines] = i - s;
+			nlines++;
+			s = i + 1;
+		}
 	}
-	int height = font->ascent + font->descent;
+
+	int line_h = font->ascent + font->descent;
+	int width = 1;
+	for (int l = 0; l < nlines; l++) {
+		int w = line_width(font, cps + lstart[l], llen[l]);
+		if (w > width)
+			width = w;
+	}
+	int height = line_h * nlines;
 	if (width < 1 || height < 1)
 		return NULL;
 
@@ -129,17 +156,19 @@ ng_text_render(struct fcft_font *font, const char *utf8, const float color[4], i
 	};
 	pixman_image_t *src = pixman_image_create_solid_fill(&pc);
 
-	int pen = 0;
-	int baseline = font->ascent;
-	for (size_t i = 0; i < n; i++) {
-		const struct fcft_glyph *g = fcft_rasterize_char_utf32(font, cps[i], FCFT_SUBPIXEL_NONE);
-		if (!g)
-			continue;
-		if (g->pix) {
-			pixman_image_composite32(PIXMAN_OP_OVER, src, g->pix, dst, 0, 0, 0, 0, pen + g->x,
-						 baseline - g->y, g->width, g->height);
+	for (int l = 0; l < nlines; l++) {
+		int pen = 0;
+		int baseline = l * line_h + font->ascent;
+		for (size_t i = 0; i < llen[l]; i++) {
+			const struct fcft_glyph *g =
+				fcft_rasterize_char_utf32(font, cps[lstart[l] + i], FCFT_SUBPIXEL_NONE);
+			if (!g)
+				continue;
+			if (g->pix)
+				pixman_image_composite32(PIXMAN_OP_OVER, src, g->pix, dst, 0, 0, 0, 0,
+							 pen + g->x, baseline - g->y, g->width, g->height);
+			pen += g->advance.x;
 		}
-		pen += g->advance.x;
 	}
 
 	pixman_image_unref(src);
