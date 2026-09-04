@@ -263,6 +263,16 @@ ng_shell_create(struct cg_server *server)
 		wlr_scene_node_set_enabled(&shell->camv->node, false);
 	}
 
+	/* power menu (above the client, below the lockscreen) */
+	shell->pwr = wlr_scene_tree_create(&server->scene->tree);
+	if (shell->pwr) {
+		static const float pd[4] = {0.02f, 0.013f, 0.008f, 0.86f};
+		shell->pwr_dim = wlr_scene_rect_create(shell->pwr, 1, 1, pd);
+		for (int i = 0; i < 3; i++)
+			shell->pwr_btn[i] = wlr_scene_buffer_create(shell->pwr, NULL);
+		wlr_scene_node_set_enabled(&shell->pwr->node, false);
+	}
+
 	/* lockscreen tree - created last so it's above everything; starts hidden */
 	shell->lock = wlr_scene_tree_create(&server->scene->tree);
 	if (shell->lock) {
@@ -463,6 +473,66 @@ ng_shell_press_button(struct ng_shell *shell, int which)
 		ng_shell_set_mic(shell, !shell->mic_on);
 		ng_spawn("neuros-mic toggle");
 	}
+}
+
+/* -- power menu ----------------------------------------------------- */
+
+static const char *PWR_LBL[3] = {"Power off", "Restart", "Cancel"};
+
+void
+ng_shell_power_menu(struct ng_shell *shell, int open)
+{
+	if (!shell || !shell->pwr)
+		return;
+	open = open ? 1 : 0;
+	shell->pwr_open = open;
+	if (open) {
+		int W = shell->width, H = shell->height, cx = W / 2;
+		place(shell->pwr_dim, 0, 0, W, H);
+		int bw = W * 60 / 100, bh = H / 18, gap = H / 55;
+		int y0 = H / 2 - (3 * bh + 2 * gap) / 2;
+		struct fcft_font *f = shell->strip_font;
+		for (int i = 0; i < 3; i++) {
+			int y = y0 + i * (bh + gap);
+			shell->pwr_box[i] = (struct wlr_box){cx - bw / 2, y, bw, bh};
+			float col[4] = {1, 1, 1, i == 0 ? 0.20f : 0.12f};
+			struct wlr_buffer *pb = ng_pill_render(bw, bh, bh / 2, col);
+			node_set(shell->pwr_btn[i], pb, cx - bw / 2, y);
+			if (f) {
+				struct wlr_buffer *t = ng_text_render(f, PWR_LBL[i], TEXT_COLOR, NULL, NULL);
+				/* overlay label centred - stack a 2nd node is overkill; redraw pill+text */
+				if (t) {
+					int tw = t->width, th = t->height;
+					wlr_buffer_drop(t);
+					struct wlr_buffer *pt = ng_pill_text_render(f, PWR_LBL[i], TEXT_COLOR, col,
+										    (bw - tw) / 2, (bh - th) / 2);
+					node_set(shell->pwr_btn[i], pt, cx - (pt ? pt->width : bw) / 2, y);
+				}
+			}
+		}
+		wlr_scene_node_raise_to_top(&shell->pwr->node);
+	}
+	wlr_scene_node_set_enabled(&shell->pwr->node, open);
+}
+
+int
+ng_shell_power_is_open(struct ng_shell *shell)
+{
+	return shell && shell->pwr_open;
+}
+
+int
+ng_shell_power_tap(struct ng_shell *shell, double lx, double ly)
+{
+	if (!shell || !shell->pwr_open)
+		return 0;
+	if (in_box(&shell->pwr_box[0], lx, ly))
+		ng_spawn("sync; poweroff");
+	else if (in_box(&shell->pwr_box[1], lx, ly))
+		ng_spawn("sync; reboot");
+	else
+		ng_shell_power_menu(shell, 0);
+	return 1;
 }
 
 /* -- lockscreen (clock view -> 6-digit passcode) --------------------- */

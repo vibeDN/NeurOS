@@ -69,6 +69,7 @@ tmux pipe-pane -t "$TMUX_SESSION" -O "cat >> '$RAW'"
 
 speak() {
 	[ -n "$TTS_VOICE" ] || return 0
+	[ -e /run/neuros/tts-off ] && return 0
 	command -v piper >/dev/null 2>&1 || return 0
 	printf '%s' "$1" | cut -c"1-$TTS_MAXCHARS" |
 		piper -q -m "$TTS_VOICE" --output-raw 2>/dev/null |

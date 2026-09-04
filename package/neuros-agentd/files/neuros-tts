@@ -1,0 +1,7 @@
+#!/bin/sh
+# Toggle TTS speech (long-press Vol +/-). agentd's speak() checks this flag.
+F=/run/neuros/tts-off
+mkdir -p /run/neuros 2>/dev/null
+if [ -e "$F" ]; then rm -f "$F"; s=on; else : > "$F"; s=off; fi
+command -v neuros-ctl >/dev/null 2>&1 && neuros-ctl status "TTS $s" 2>/dev/null || true
+echo "tts: $s"

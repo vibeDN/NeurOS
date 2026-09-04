@@ -1,0 +1,11 @@
+#!/bin/sh
+# Toggle a second "workspace": a plain shell window in the agent tmux session
+# (Power + Vol-Up combo). The centre-pane terminal follows the active window.
+export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/0}"
+S=agent
+tmux has-session -t "$S" 2>/dev/null || exit 0
+if tmux list-windows -t "$S" -F '#W' 2>/dev/null | grep -qx ws2; then
+  tmux kill-window -t "$S":ws2 2>/dev/null
+else
+  tmux new-window -t "$S" -n ws2 'exec fish' 2>/dev/null
+fi

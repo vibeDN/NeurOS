@@ -15,6 +15,7 @@
 
 #include "ipc.h"
 #include "osk.h"
+#include "output.h"
 #include "server.h"
 #include "shell.h"
 #include "view.h"
@@ -92,6 +93,17 @@ handle_line(struct ng_ipc *ipc, char *line)
 		ng_shell_set_locked(shell, 1, (arg && arg[0]) ? arg : NULL, bar);
 	} else if (strcmp(line, "unlock") == 0) {
 		ng_shell_set_locked(shell, 0, NULL, NULL);
+	} else if (strcmp(line, "screen") == 0) {
+		static int off = 0;
+		if (arg && strcmp(arg, "on") == 0)
+			off = 0;
+		else if (arg && strcmp(arg, "off") == 0)
+			off = 1;
+		else
+			off = !off;
+		output_set_power(ipc->server, !off);
+	} else if (strcmp(line, "power") == 0) {
+		ng_shell_power_menu(shell, !(arg && strcmp(arg, "hide") == 0));
 	} else if (strcmp(line, "camera") == 0) {
 		if (arg && strcmp(arg, "toggle") == 0)
 			ng_shell_set_camera(shell, !ng_shell_is_camera(shell));

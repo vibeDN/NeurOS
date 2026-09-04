@@ -1,0 +1,12 @@
+#!/bin/sh
+# TTS / system output volume (short-press Vol +/-).
+d=6
+case "${1:-up}" in
+up)   arg="${d}%+" ;;
+down) arg="${d}%-" ;;
+*)    echo "usage: neuros-vol up|down" >&2; exit 2 ;;
+esac
+for c in Master PCM Speaker Headphone; do
+  amixer -q sset "$c" "$arg" unmute 2>/dev/null && exit 0
+done
+exit 0

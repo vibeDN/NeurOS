@@ -1,0 +1,9 @@
+#!/bin/sh
+# Screen on/off (short-press Power). Off also locks.
+F=/run/neuros/screen-off
+mkdir -p /run/neuros 2>/dev/null
+if [ -e "$F" ]; then
+  rm -f "$F"; neuros-ctl screen on
+else
+  : > "$F"; neuros-lock lock 2>/dev/null; neuros-ctl screen off
+fi

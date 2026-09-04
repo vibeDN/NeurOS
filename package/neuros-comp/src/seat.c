@@ -13,6 +13,8 @@
 #include <assert.h>
 #include <linux/input-event-codes.h>
 #include <stdlib.h>
+#include <sys/wait.h>
+#include <unistd.h>
 #include <string.h>
 #include <wayland-server-core.h>
 #include <wlr/backend.h>
@@ -322,10 +324,93 @@ handle_keybinding(struct cg_server *server, xkb_keysym_t sym)
 	return true;
 }
 
+/* fire-and-forget a helper (double-fork) */
+static void
+hw_spawn(const char *cmd)
+{
+	pid_t p = fork();
+	if (p == 0) {
+		setsid();
+		if (fork() == 0) {
+			execl("/bin/sh", "sh", "-c", cmd, (char *) NULL);
+			_exit(127);
+		}
+		_exit(0);
+	} else if (p > 0) {
+		int st;
+		waitpid(p, &st, 0);
+	}
+}
+
+/* KEY_POWER=116  KEY_VOLUMEDOWN=114  KEY_VOLUMEUP=115 */
+static int
+hw_index(uint32_t code)
+{
+	switch (code) {
+	case 116:
+		return 0;
+	case 114:
+		return 1;
+	case 115:
+		return 2;
+	default:
+		return -1;
+	}
+}
+
+/* returns true if consumed (do not forward to the client) */
+static bool
+handle_hw_key(struct cg_seat *seat, struct wlr_keyboard_key_event *event)
+{
+	int i = hw_index(event->keycode);
+	if (i < 0)
+		return false;
+	const uint32_t LONG = 550; /* ms */
+
+	if (event->state == WL_KEYBOARD_KEY_STATE_PRESSED) {
+		seat->hwkey_down_ms[i] = event->time_msec;
+		seat->hwkey_held[i] = true;
+		/* combo: power + vol-up held together -> switch workspace */
+		if (seat->hwkey_held[0] && seat->hwkey_held[2] && !seat->hwkey_combo) {
+			seat->hwkey_combo = true;
+			hw_spawn("neuros-ws toggle");
+		}
+		return true;
+	}
+
+	/* RELEASE */
+	seat->hwkey_held[i] = false;
+	uint32_t dur = event->time_msec - seat->hwkey_down_ms[i];
+	bool was_combo = seat->hwkey_combo;
+	if (!seat->hwkey_held[0] && !seat->hwkey_held[2])
+		seat->hwkey_combo = false;
+	if (was_combo)
+		return true; /* combo consumed the hold */
+
+	bool lng = dur >= LONG;
+	switch (i) {
+	case 0: /* power */
+		hw_spawn(lng ? "neuros-ctl power" : "neuros-screen toggle");
+		break;
+	case 1: /* vol- */
+		hw_spawn(lng ? "neuros-tts toggle" : "neuros-vol down");
+		break;
+	case 2: /* vol+ */
+		hw_spawn(lng ? "neuros-tts toggle" : "neuros-vol up");
+		break;
+	}
+	return true;
+}
+
 static void
 handle_key_event(struct wlr_keyboard *keyboard, struct cg_seat *seat, void *data)
 {
 	struct wlr_keyboard_key_event *event = data;
+
+	if (handle_hw_key(seat, event)) {
+		wlr_idle_notifier_v1_notify_activity(seat->server->idle, seat->seat);
+		return;
+	}
 
 	/* Translate from libinput keycode to an xkbcommon keycode. */
 	xkb_keycode_t keycode = event->keycode + 8;
@@ -554,6 +639,11 @@ handle_touch_down(struct wl_listener *listener, void *data)
 
 	if (seat->server->shell) {
 		struct ng_shell *sh = seat->server->shell;
+		if (ng_shell_power_is_open(sh)) {
+			ng_shell_power_tap(sh, lx, ly);
+			wlr_idle_notifier_v1_notify_activity(seat->server->idle, seat->seat);
+			return;
+		}
 		if (ng_shell_is_locked(sh)) {
 			ng_shell_lock_tap(sh, lx, ly);
 			wlr_idle_notifier_v1_notify_activity(seat->server->idle, seat->seat);
@@ -687,6 +777,11 @@ handle_cursor_button(struct wl_listener *listener, void *data)
 
 	if ((uint32_t) event->state == WLR_BUTTON_PRESSED && seat->server->shell) {
 		struct ng_shell *sh = seat->server->shell;
+		if (ng_shell_power_is_open(sh)) {
+			ng_shell_power_tap(sh, seat->cursor->x, seat->cursor->y);
+			wlr_idle_notifier_v1_notify_activity(seat->server->idle, seat->seat);
+			return;
+		}
 		if (ng_shell_is_locked(sh)) {
 			ng_shell_lock_tap(sh, seat->cursor->x, seat->cursor->y);
 			wlr_idle_notifier_v1_notify_activity(seat->server->idle, seat->seat);

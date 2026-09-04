@@ -28,6 +28,11 @@ struct cg_seat {
 	struct wlr_keyboard *osk_keyboard; /* synthetic kb behind the on-screen keyboard */
 	bool osk_grab;                     /* the current press was consumed by the OSK */
 
+	/* hardware side keys: [0]=power [1]=vol- [2]=vol+ */
+	uint32_t hwkey_down_ms[3];
+	bool hwkey_held[3];
+	bool hwkey_combo; /* a combo already fired this hold */
+
 	struct wlr_cursor *cursor;
 	struct wlr_xcursor_manager *xcursor_manager;
 	struct wl_listener cursor_motion_relative;

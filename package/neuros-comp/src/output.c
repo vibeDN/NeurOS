@@ -455,3 +455,16 @@ handle_output_manager_test(struct wl_listener *listener, void *data)
 
 	wlr_output_configuration_v1_destroy(config);
 }
+
+void
+output_set_power(struct cg_server *server, bool on)
+{
+	struct cg_output *output;
+	wl_list_for_each (output, &server->outputs, link) {
+		struct wlr_output_state state = {0};
+		wlr_output_state_init(&state);
+		wlr_output_state_set_enabled(&state, on);
+		wlr_output_commit_state(output->wlr_output, &state);
+		wlr_output_state_finish(&state);
+	}
+}

@@ -91,6 +91,13 @@ struct ng_shell {
 	int lock_wrong; /* set briefly after a bad code */
 	int locked;
 
+	/* power menu overlay */
+	struct wlr_scene_tree *pwr;
+	struct wlr_scene_rect *pwr_dim;
+	struct wlr_scene_buffer *pwr_btn[3]; /* Power off / Restart / Cancel */
+	struct wlr_box pwr_box[3];
+	int pwr_open;
+
 	/* camera mode - full-panel viewfinder over the centre pane */
 	struct wlr_scene_tree *camv;
 	struct wlr_scene_rect *camv_dim;
@@ -144,5 +151,10 @@ void ng_shell_set_locked(struct ng_shell *shell, int locked, const char *time, c
 int ng_shell_is_locked(struct ng_shell *shell);
 /* Tap while locked: returns 1 if it hit the unlock control (and unlocked). */
 int ng_shell_lock_tap(struct ng_shell *shell, double lx, double ly);
+
+/* Power menu (long-press Power). */
+void ng_shell_power_menu(struct ng_shell *shell, int open);
+int ng_shell_power_is_open(struct ng_shell *shell);
+int ng_shell_power_tap(struct ng_shell *shell, double lx, double ly);
 
 #endif
