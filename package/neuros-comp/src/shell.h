@@ -21,7 +21,8 @@ struct fcft_font;
 
 struct ng_shell {
 	struct cg_server *server;
-	struct wlr_scene_tree *tree; /* chrome, below the views */
+	struct wlr_scene_tree *tree;    /* chrome, below the views */
+	struct wlr_scene_tree *overlay; /* raised above the views (overlay buttons) */
 
 	struct flf_font *font;      /* the .flf */
 	struct fcft_font *big_font; /* monospace, sized to the panes */
@@ -49,6 +50,13 @@ struct ng_shell {
 	int active_dot;
 
 	struct wlr_scene_buffer *home_node; /* home indicator bar */
+
+	/* centre-panel overlay buttons */
+	struct wlr_scene_buffer *cam_node;
+	struct wlr_scene_buffer *mic_node;
+	struct wlr_box cam_box;
+	struct wlr_box mic_box;
+	int mic_on;
 
 	/* small mono text via fcft: top strip (clock) + bottom activity sub-line */
 	struct fcft_font *strip_font;
@@ -84,5 +92,16 @@ void ng_shell_set_model(struct ng_shell *shell, const char *model);
 void ng_shell_set_strip(struct ng_shell *shell, const char *text);
 void ng_shell_set_strip_right(struct ng_shell *shell, const char *text);
 void ng_shell_set_activity(struct ng_shell *shell, const char *text);
+
+/* Centre-panel overlay buttons. */
+void ng_shell_set_mic(struct ng_shell *shell, int on);
+
+/* Hit-test the overlay buttons at layout coords: returns 1 = camera, 2 = mic,
+ * 0 = neither. On a hit, the compositor consumes the press and runs the action. */
+int ng_shell_button_at(struct ng_shell *shell, double lx, double ly);
+void ng_shell_press_button(struct ng_shell *shell, int which);
+
+/* Keep the overlay buttons above the client; call when a view maps. */
+void ng_shell_raise_overlay(struct ng_shell *shell);
 
 #endif

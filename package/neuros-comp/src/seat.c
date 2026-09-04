@@ -38,6 +38,7 @@
 #include "output.h"
 #include "seat.h"
 #include "server.h"
+#include "shell.h"
 #include "view.h"
 #if CAGE_HAS_XWAYLAND
 #include "xwayland.h"
@@ -506,6 +507,15 @@ handle_touch_down(struct wl_listener *listener, void *data)
 	double lx, ly;
 	wlr_cursor_absolute_to_layout_coords(seat->cursor, &event->touch->base, event->x, event->y, &lx, &ly);
 
+	if (seat->server->shell) {
+		int b = ng_shell_button_at(seat->server->shell, lx, ly);
+		if (b) {
+			ng_shell_press_button(seat->server->shell, b);
+			wlr_idle_notifier_v1_notify_activity(seat->server->idle, seat->seat);
+			return;
+		}
+	}
+
 	double sx, sy;
 	struct wlr_surface *surface;
 	struct cg_view *view = desktop_view_at(seat->server, lx, ly, &surface, &sx, &sy);
@@ -610,6 +620,15 @@ handle_cursor_button(struct wl_listener *listener, void *data)
 {
 	struct cg_seat *seat = wl_container_of(listener, seat, cursor_button);
 	struct wlr_pointer_button_event *event = data;
+
+	if ((uint32_t) event->state == WLR_BUTTON_PRESSED && seat->server->shell) {
+		int b = ng_shell_button_at(seat->server->shell, seat->cursor->x, seat->cursor->y);
+		if (b) {
+			ng_shell_press_button(seat->server->shell, b);
+			wlr_idle_notifier_v1_notify_activity(seat->server->idle, seat->seat);
+			return;
+		}
+	}
 
 	wlr_seat_pointer_notify_button(seat->seat, event->time_msec, event->button, event->state);
 	press_cursor_button(seat, &event->pointer->base, event->time_msec, event->button, event->state, seat->cursor->x,

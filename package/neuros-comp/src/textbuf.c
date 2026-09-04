@@ -396,6 +396,145 @@ ng_dot_render(int d, const float color[4], int ring, const float ringcol[4])
 	return buf_from_data(data, d, d);
 }
 
+/* -- overlay buttons (camera / mic) ---------------------------------- */
+
+/* add a soft round dab of coverage into an f32 map */
+static void
+cov_dab(float *cov, int W, int H, float cx, float cy, float r)
+{
+	int x0 = (int) (cx - r - 1), x1 = (int) (cx + r + 1);
+	int y0 = (int) (cy - r - 1), y1 = (int) (cy + r + 1);
+	if (x0 < 0)
+		x0 = 0;
+	if (y0 < 0)
+		y0 = 0;
+	if (x1 >= W)
+		x1 = W - 1;
+	if (y1 >= H)
+		y1 = H - 1;
+	for (int y = y0; y <= y1; y++)
+		for (int x = x0; x <= x1; x++) {
+			float d = sqrtf((x + 0.5f - cx) * (x + 0.5f - cx) + (y + 0.5f - cy) * (y + 0.5f - cy));
+			float c = r - d; /* 1px AA falloff */
+			if (c <= 0)
+				continue;
+			if (c > 1)
+				c = 1;
+			float *p = &cov[y * W + x];
+			if (c > *p)
+				*p = c;
+		}
+}
+
+static void
+cov_line(float *cov, int W, int H, float x0, float y0, float x1, float y1, float thick)
+{
+	float dx = x1 - x0, dy = y1 - y0;
+	float len = sqrtf(dx * dx + dy * dy);
+	int steps = (int) (len * 2) + 1;
+	for (int i = 0; i <= steps; i++) {
+		float t = (float) i / steps;
+		cov_dab(cov, W, H, x0 + dx * t, y0 + dy * t, thick / 2);
+	}
+}
+
+static void
+cov_arc(float *cov, int W, int H, float cx, float cy, float rad, float a0, float a1, float thick)
+{
+	int steps = (int) (fabsf(a1 - a0) * rad) + 2;
+	for (int i = 0; i <= steps; i++) {
+		float a = a0 + (a1 - a0) * i / steps;
+		cov_dab(cov, W, H, cx + cosf(a) * rad, cy + sinf(a) * rad, thick / 2);
+	}
+}
+
+struct wlr_buffer *
+ng_button_render(int d, int icon, const float bg[4], const float ring[4], const float fg[4])
+{
+	if (d < 12)
+		return NULL;
+	uint32_t *data = calloc((size_t) d * d, 4);
+	if (!data)
+		return NULL;
+	float *cov = calloc((size_t) d * d, sizeof(float));
+	if (!cov) {
+		free(data);
+		return NULL;
+	}
+
+	float c = (d - 1) / 2.0f, rad = d / 2.0f;
+	float u = d / 24.0f; /* icon units: viewBox is 24 wide, centred */
+
+	/* glass disc + rim */
+	for (int y = 0; y < d; y++)
+		for (int x = 0; x < d; x++) {
+			float dist = sqrtf((x + 0.5f - c) * (x + 0.5f - c) + (y + 0.5f - c) * (y + 0.5f - c));
+			float in = rad - dist;
+			if (in <= 0)
+				continue;
+			float cvr = in > 1 ? 1.0f : in;
+			const float *col = bg;
+			float a = bg[3];
+			if (dist > rad - 1.7f) {
+				col = ring;
+				a = ring[3];
+			}
+			data[(size_t) y * d + x] = premul(col[0], col[1], col[2], a * cvr);
+		}
+
+	/* icon coverage, drawn in a 24x24 space centred on the button */
+#define IX(v) (c + ((v) -12.0f) * u)
+#define IY(v) (c + ((v) -12.0f) * u)
+	float th = 1.9f * u;
+	if (icon == 0) {
+		/* camera: body + top bump + lens */
+		cov_line(cov, d, d, IX(4), IY(8), IX(20), IY(8), th);
+		cov_line(cov, d, d, IX(4), IY(19), IX(20), IY(19), th);
+		cov_line(cov, d, d, IX(4), IY(8), IX(4), IY(19), th);
+		cov_line(cov, d, d, IX(20), IY(8), IX(20), IY(19), th);
+		cov_line(cov, d, d, IX(9), IY(8), IX(10.5f), IY(5), th);
+		cov_line(cov, d, d, IX(15), IY(8), IX(13.5f), IY(5), th);
+		cov_line(cov, d, d, IX(10.5f), IY(5), IX(13.5f), IY(5), th);
+		cov_arc(cov, d, d, IX(12), IY(13.5f), 3.6f * u, 0, 6.2832f, th);
+	} else {
+		/* microphone: capsule + arc + stand */
+		cov_arc(cov, d, d, IX(12), IY(5), 3.0f * u, 3.1416f, 6.2832f, th);   /* top cap */
+		cov_arc(cov, d, d, IX(12), IY(11), 3.0f * u, 0, 3.1416f, th);        /* bottom cap */
+		cov_line(cov, d, d, IX(9), IY(5), IX(9), IY(11), th);
+		cov_line(cov, d, d, IX(15), IY(5), IX(15), IY(11), th);
+		cov_arc(cov, d, d, IX(12), IY(11), 7.0f * u, 0.30f, 2.84f, th);      /* pickup arc */
+		cov_line(cov, d, d, IX(12), IY(18), IX(12), IY(22), th);
+		cov_line(cov, d, d, IX(8), IY(22), IX(16), IY(22), th);
+	}
+#undef IX
+#undef IY
+
+	/* composite fg over the premultiplied disc */
+	for (int i = 0; i < d * d; i++) {
+		float a = cov[i];
+		if (a <= 0)
+			continue;
+		if (a > 1)
+			a = 1;
+		a *= fg[3];
+		uint32_t dp = data[i];
+		float da = ((dp >> 24) & 0xff) / 255.0f;
+		float dr = ((dp >> 16) & 0xff) / 255.0f;
+		float dg = ((dp >> 8) & 0xff) / 255.0f;
+		float db = (dp & 0xff) / 255.0f;
+		float sr = fg[0] * a, sg = fg[1] * a, sb = fg[2] * a;
+		float o = 1.0f - a;
+		uint32_t oa = (uint32_t) ((a + da * o) * 255 + 0.5f);
+		uint32_t orr = (uint32_t) ((sr + dr * o) * 255 + 0.5f);
+		uint32_t og = (uint32_t) ((sg + dg * o) * 255 + 0.5f);
+		uint32_t ob = (uint32_t) ((sb + db * o) * 255 + 0.5f);
+		data[i] = (oa << 24) | (orr << 16) | (og << 8) | ob;
+	}
+
+	free(cov);
+	return buf_from_data(data, d, d);
+}
+
 struct wlr_buffer *
 ng_pill_text_render(struct fcft_font *font, const char *text, const float textcol[4], const float pillcol[4],
 		    int padx, int pady)

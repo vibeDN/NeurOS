@@ -37,4 +37,9 @@ struct wlr_buffer *ng_pill_text_render(struct fcft_font *font, const char *text,
 /* Filled circle of `color`; if `ring` > 0, a `ring`-px outline in `ringcol`. */
 struct wlr_buffer *ng_dot_render(int d, const float color[4], int ring, const float ringcol[4]);
 
+/* Round glass overlay button, `d` px. `icon`: 0 = camera, 1 = microphone.
+ * `bg` fills the disc, `ring` is a 1.5px rim, `fg` draws the glyph (all straight
+ * RGBA). Buffer is premultiplied ARGB, d x d. */
+struct wlr_buffer *ng_button_render(int d, int icon, const float bg[4], const float ring[4], const float fg[4]);
+
 #endif

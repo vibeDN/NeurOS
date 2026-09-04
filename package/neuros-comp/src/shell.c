@@ -12,8 +12,11 @@
  */
 #define _POSIX_C_SOURCE 200809L
 
+#include <signal.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/wait.h>
+#include <unistd.h>
 #include <fcft/fcft.h>
 #include <wlr/types/wlr_buffer.h>
 #include <wlr/types/wlr_scene.h>
@@ -32,9 +35,35 @@ static const float TEXT_COLOR[4] = {0.992f, 0.984f, 0.973f, 1.0f};  /* #fdfbf8 *
 static const float DIM_COLOR[4] = {0.992f, 0.984f, 0.973f, 0.66f};
 static const float PILL_COLOR[4] = {1.0f, 1.0f, 1.0f, 0.14f};
 
+/* overlay button (camera / mic) - glass by default, accent-tinted when mic is on */
+static const float BTN_BG[4] = {1.0f, 1.0f, 1.0f, 0.10f};
+static const float BTN_RING[4] = {1.0f, 1.0f, 1.0f, 0.28f};
+static const float BTN_FG[4] = {0.949f, 0.937f, 0.914f, 0.92f}; /* #f2efe9 */
+
 /* default wallpaper = Claude accent -> darker shade (#D97757 -> #4a2415) */
 static const float DEFAULT_TOP[4] = {0.851f, 0.463f, 0.341f, 1.0f};
 static const float DEFAULT_BOTTOM[4] = {0.290f, 0.141f, 0.082f, 1.0f};
+
+/* fire-and-forget a shell command (double-fork so we don't leave zombies) */
+static void
+ng_spawn(const char *cmd)
+{
+	pid_t pid = fork();
+	if (pid == 0) {
+		sigset_t set;
+		sigemptyset(&set);
+		sigprocmask(SIG_SETMASK, &set, NULL);
+		setsid();
+		if (fork() == 0) {
+			execl("/bin/sh", "sh", "-c", cmd, (char *) NULL);
+			_exit(127);
+		}
+		_exit(0);
+	} else if (pid > 0) {
+		int st;
+		waitpid(pid, &st, 0);
+	}
+}
 
 static void
 lerp4(float out[4], const float a[4], const float b[4], float t)
@@ -207,6 +236,12 @@ ng_shell_create(struct cg_server *server)
 		shell->dot[i] = wlr_scene_buffer_create(shell->tree, NULL);
 	shell->home_node = wlr_scene_buffer_create(shell->tree, NULL);
 
+	shell->overlay = wlr_scene_tree_create(&server->scene->tree);
+	if (shell->overlay) {
+		shell->cam_node = wlr_scene_buffer_create(shell->overlay, NULL);
+		shell->mic_node = wlr_scene_buffer_create(shell->overlay, NULL);
+	}
+
 	shell->agent_text = strdup("NeurOS");
 	shell->status_text = strdup("Idle");
 	shell->model_text = NULL;
@@ -342,6 +377,53 @@ ng_shell_set_activity(struct ng_shell *shell, const char *text)
 }
 
 void
+ng_shell_set_mic(struct ng_shell *shell, int on)
+{
+	on = on ? 1 : 0;
+	if (shell->mic_on == on)
+		return;
+	shell->mic_on = on;
+	ng_shell_layout(shell, shell->width, shell->height);
+}
+
+void
+ng_shell_raise_overlay(struct ng_shell *shell)
+{
+	if (shell && shell->overlay)
+		wlr_scene_node_raise_to_top(&shell->overlay->node);
+}
+
+static int
+in_box(const struct wlr_box *b, double x, double y)
+{
+	return x >= b->x && x < b->x + b->width && y >= b->y && y < b->y + b->height;
+}
+
+int
+ng_shell_button_at(struct ng_shell *shell, double lx, double ly)
+{
+	if (!shell)
+		return 0;
+	if (shell->cam_node && shell->cam_node->buffer && in_box(&shell->cam_box, lx, ly))
+		return 1;
+	if (shell->mic_node && shell->mic_node->buffer && in_box(&shell->mic_box, lx, ly))
+		return 2;
+	return 0;
+}
+
+void
+ng_shell_press_button(struct ng_shell *shell, int which)
+{
+	if (which == 1) {
+		ng_spawn("command -v neuros-camera >/dev/null && neuros-camera toggle || true");
+	} else if (which == 2) {
+		/* toggle the mic; neuros-mic echoes the new state back via `neuros-ctl mic` */
+		ng_shell_set_mic(shell, !shell->mic_on);
+		ng_spawn("neuros-mic toggle");
+	}
+}
+
+void
 ng_shell_layout(struct ng_shell *shell, int width, int height)
 {
 	if (width < 16 || height < 16)
@@ -444,6 +526,38 @@ ng_shell_layout(struct ng_shell *shell, int width, int height)
 	float home_col[4] = {shell->top_color[0], shell->top_color[1], shell->top_color[2], 0.55f};
 	node_set(shell->home_node, ng_pill_render(hb_w, hb_h, hb_h / 2, home_col), (width - hb_w) / 2,
 		 height - margin / 2 - hb_h);
+
+	/* centre-panel overlay buttons: camera + mic, stacked bottom-right */
+	int bd = height / 15;
+	if (bd < 30)
+		bd = 30;
+	if (bd > 60)
+		bd = 60;
+	int bpad = bd / 2;
+	int bgap = bd / 4;
+	int bx = shell->center_box.x + shell->center_box.width - bpad - bd;
+	int cam_y = shell->center_box.y + shell->center_box.height - bpad - bd * 2 - bgap;
+	int mic_y = cam_y + bd + bgap;
+	shell->cam_box = (struct wlr_box){bx, cam_y, bd, bd};
+	shell->mic_box = (struct wlr_box){bx, mic_y, bd, bd};
+
+	float mic_bg[4], mic_ring[4];
+	if (shell->mic_on) {
+		mic_ring[0] = shell->top_color[0];
+		mic_ring[1] = shell->top_color[1];
+		mic_ring[2] = shell->top_color[2];
+		mic_ring[3] = 0.95f;
+		mic_bg[0] = shell->top_color[0];
+		mic_bg[1] = shell->top_color[1];
+		mic_bg[2] = shell->top_color[2];
+		mic_bg[3] = 0.35f;
+	} else {
+		memcpy(mic_bg, BTN_BG, sizeof(mic_bg));
+		memcpy(mic_ring, BTN_RING, sizeof(mic_ring));
+	}
+	node_set(shell->cam_node, ng_button_render(bd, 0, BTN_BG, BTN_RING, BTN_FG), bx, cam_y);
+	node_set(shell->mic_node, ng_button_render(bd, 1, mic_bg, mic_ring, BTN_FG), bx, mic_y);
+	ng_shell_raise_overlay(shell);
 
 	/* reposition the small texts for the new boxes */
 	ng_shell_set_strip(shell, shell->strip_text);

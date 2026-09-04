@@ -11,4 +11,6 @@ toggle) [ -e "$FLAG" ] && rm -f "$FLAG" || : > "$FLAG" ;;
 *)      echo "usage: neuros-mic on|off|toggle" >&2; exit 2 ;;
 esac
 
-if [ -e "$FLAG" ]; then echo "mic: on"; else echo "mic: off"; fi
+if [ -e "$FLAG" ]; then st=on; else st=off; fi
+echo "mic: $st"
+command -v neuros-ctl >/dev/null 2>&1 && neuros-ctl mic "$st" 2>/dev/null || true

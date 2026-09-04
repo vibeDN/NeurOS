@@ -137,6 +137,11 @@ view_map(struct cg_view *view, struct wlr_surface *surface)
 
 	wl_list_insert(&view->server->views, &view->link);
 	seat_set_focus(view->server->seat, view);
+
+	/* keep the centre-panel overlay buttons above the client */
+	if (view->server->shell) {
+		ng_shell_raise_overlay(view->server->shell);
+	}
 }
 
 void

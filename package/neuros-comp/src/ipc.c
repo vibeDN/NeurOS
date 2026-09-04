@@ -73,6 +73,11 @@ handle_line(struct ng_ipc *ipc, char *line)
 		ng_shell_set_strip_right(shell, arg ? arg : "");
 	} else if (strcmp(line, "activity") == 0) {
 		ng_shell_set_activity(shell, arg ? arg : "");
+	} else if (strcmp(line, "mic") == 0) {
+		if (arg && strcmp(arg, "toggle") == 0)
+			ng_shell_set_mic(shell, !shell->mic_on);
+		else
+			ng_shell_set_mic(shell, arg && strcmp(arg, "on") == 0);
 	} else if (strcmp(line, "colors") == 0 && arg) {
 		char *sp = strchr(arg, ' ');
 		float top[4], bot[4];
