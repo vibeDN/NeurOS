@@ -86,6 +86,16 @@ struct ng_shell {
 	char *lock_date_text;
 	int locked;
 
+	/* camera mode - full-panel viewfinder over the centre pane */
+	struct wlr_scene_tree *camv;
+	struct wlr_scene_rect *camv_dim;
+	struct wlr_scene_buffer *camv_view_node;
+	struct wlr_scene_buffer *camv_back_node;
+	struct wlr_scene_buffer *camv_shot_node;
+	struct wlr_scene_buffer *camv_hint_node;
+	struct wlr_box camv_view_box, camv_back_box, camv_shot_box;
+	int camera_on;
+
 	int width, height;
 	int frame_t;   /* hairline border */
 	int panel_rad; /* glass panel corner radius - view.c insets the client by it */
@@ -114,6 +124,12 @@ void ng_shell_set_mic(struct ng_shell *shell, int on);
  * 0 = neither. On a hit, the compositor consumes the press and runs the action. */
 int ng_shell_button_at(struct ng_shell *shell, double lx, double ly);
 void ng_shell_press_button(struct ng_shell *shell, int which);
+
+/* Camera mode: viewfinder with a back + shutter button over the centre pane. */
+void ng_shell_set_camera(struct ng_shell *shell, int on);
+int ng_shell_is_camera(struct ng_shell *shell);
+/* Tap while in camera mode: always consumed; back closes, shutter captures. */
+int ng_shell_camera_tap(struct ng_shell *shell, double lx, double ly);
 
 /* Keep the overlay buttons above the client; call when a view maps. */
 void ng_shell_raise_overlay(struct ng_shell *shell);

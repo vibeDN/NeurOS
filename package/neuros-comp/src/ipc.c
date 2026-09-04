@@ -88,6 +88,11 @@ handle_line(struct ng_ipc *ipc, char *line)
 		ng_shell_set_locked(shell, 1, (arg && arg[0]) ? arg : NULL, bar);
 	} else if (strcmp(line, "unlock") == 0) {
 		ng_shell_set_locked(shell, 0, NULL, NULL);
+	} else if (strcmp(line, "camera") == 0) {
+		if (arg && strcmp(arg, "toggle") == 0)
+			ng_shell_set_camera(shell, !ng_shell_is_camera(shell));
+		else
+			ng_shell_set_camera(shell, arg && strcmp(arg, "on") == 0);
 	} else if (strcmp(line, "kbd") == 0) {
 		struct ng_osk *osk = ipc->server->osk;
 		if (osk && arg && strncmp(arg, "tap ", 4) == 0) {

@@ -1,0 +1,33 @@
+#!/bin/sh
+# NeurOS camera control. The viewfinder UI lives in the compositor; this drives
+# it and (when a capture backend + /dev/video0 exist) grabs stills.
+set -u
+RT=/run/neuros
+mkdir -p "$RT" 2>/dev/null || true
+SHOTS="${NEUROS_CAMERA_DIR:-/home/claude/pictures}"
+
+log() { echo "[camera] $*" >&2; }
+
+grab() {
+	dev=/dev/video0
+	[ -e "$dev" ] || { log "no $dev"; return 1; }
+	mkdir -p "$SHOTS"
+	out="$SHOTS/$(date +%Y%m%d-%H%M%S).jpg"
+	if command -v fswebcam >/dev/null 2>&1; then
+		fswebcam -q -d "$dev" -r 1280x720 --no-banner "$out" && { log "saved $out"; return 0; }
+	elif command -v ffmpeg >/dev/null 2>&1; then
+		ffmpeg -hide_banner -loglevel error -f v4l2 -i "$dev" -frames:v 1 "$out" && { log "saved $out"; return 0; }
+	fi
+	log "no capture backend (fswebcam/ffmpeg)"
+	return 1
+}
+
+case "${1:-toggle}" in
+toggle) command -v neuros-ctl >/dev/null && neuros-ctl camera toggle ;;
+on)     command -v neuros-ctl >/dev/null && neuros-ctl camera on ;;
+off)    command -v neuros-ctl >/dev/null && neuros-ctl camera off ;;
+start)  : > "$RT/camera" ;;
+stop)   rm -f "$RT/camera" ;;
+shot)   grab ;;
+*)      echo "usage: neuros-camera [toggle|on|off|start|stop|shot]" >&2; exit 2 ;;
+esac

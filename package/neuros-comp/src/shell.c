@@ -250,6 +250,18 @@ ng_shell_create(struct cg_server *server)
 		shell->mic_node = wlr_scene_buffer_create(shell->overlay, NULL);
 	}
 
+	/* camera-mode tree (above the client, below the lockscreen); starts hidden */
+	shell->camv = wlr_scene_tree_create(&server->scene->tree);
+	if (shell->camv) {
+		static const float cscrim[4] = {0.03f, 0.02f, 0.015f, 0.92f};
+		shell->camv_dim = wlr_scene_rect_create(shell->camv, 1, 1, cscrim);
+		shell->camv_view_node = wlr_scene_buffer_create(shell->camv, NULL);
+		shell->camv_back_node = wlr_scene_buffer_create(shell->camv, NULL);
+		shell->camv_shot_node = wlr_scene_buffer_create(shell->camv, NULL);
+		shell->camv_hint_node = wlr_scene_buffer_create(shell->camv, NULL);
+		wlr_scene_node_set_enabled(&shell->camv->node, false);
+	}
+
 	/* lockscreen tree - created last so it's above everything; starts hidden */
 	shell->lock = wlr_scene_tree_create(&server->scene->tree);
 	if (shell->lock) {
@@ -442,7 +454,7 @@ void
 ng_shell_press_button(struct ng_shell *shell, int which)
 {
 	if (which == 1) {
-		ng_spawn("command -v neuros-camera >/dev/null && neuros-camera toggle || true");
+		ng_shell_set_camera(shell, !shell->camera_on);
 	} else if (which == 2) {
 		/* toggle the mic; neuros-mic echoes the new state back via `neuros-ctl mic` */
 		ng_shell_set_mic(shell, !shell->mic_on);
@@ -570,6 +582,91 @@ ng_shell_lock_tap(struct ng_shell *shell, double lx, double ly)
 		return 1;
 	}
 	return 1; /* swallow every tap while locked */
+}
+
+/* -- camera mode ----------------------------------------------------- */
+
+static void
+camera_layout(struct ng_shell *shell)
+{
+	if (!shell->camv || shell->width < 16 || shell->height < 16)
+		return;
+	int W = shell->width, H = shell->height;
+	place(shell->camv_dim, 0, 0, W, H);
+
+	int margin = W / 22;
+	int bd = H / 16;
+	if (bd < 34)
+		bd = 34;
+	if (bd > 56)
+		bd = 56;
+
+	/* viewfinder fills the space between the top row and the shutter */
+	struct wlr_box vb = {margin, margin + bd + margin / 2, W - 2 * margin,
+			     H - (margin + bd + margin / 2) - (bd * 3 / 2 + 2 * margin)};
+	if (vb.height < 40)
+		vb.height = 40;
+	shell->camv_view_box = vb;
+
+	/* viewfinder placeholder (live feed comes with the phone camera HAL) */
+	node_set(shell->camv_view_node, ng_panel_render(vb.width, vb.height, W / 22, 1), vb.x, vb.y);
+	struct wlr_buffer *h1 =
+		shell->strip_font ? ng_text_render(shell->strip_font, "camera view", DIM_COLOR, NULL, NULL) : NULL;
+	if (h1)
+		node_set(shell->camv_hint_node, h1, vb.x + (vb.width - h1->width) / 2,
+			 vb.y + vb.height / 2 - h1->height / 2);
+
+	/* back (X), top-left */
+	shell->camv_back_box = (struct wlr_box){margin, margin, bd, bd};
+	node_set(shell->camv_back_node, ng_button_render(bd, 4, BTN_BG, BTN_RING, BTN_FG), margin, margin);
+
+	/* shutter, bottom-centre */
+	int sd = bd * 3 / 2;
+	int sx = (W - sd) / 2, sy = H - sd - margin - shell->height / 40;
+	shell->camv_shot_box = (struct wlr_box){sx, sy, sd, sd};
+	float ring[4] = {shell->top_color[0], shell->top_color[1], shell->top_color[2], 0.95f};
+	node_set(shell->camv_shot_node, ng_button_render(sd, 5, BTN_BG, ring, BTN_FG), sx, sy);
+}
+
+void
+ng_shell_set_camera(struct ng_shell *shell, int on)
+{
+	if (!shell || !shell->camv)
+		return;
+	on = on ? 1 : 0;
+	if (shell->camera_on == on)
+		return;
+	shell->camera_on = on;
+	if (on) {
+		camera_layout(shell);
+		wlr_scene_node_raise_to_top(&shell->camv->node);
+		ng_spawn("command -v neuros-camera >/dev/null && neuros-camera start || true");
+	} else {
+		ng_spawn("command -v neuros-camera >/dev/null && neuros-camera stop || true");
+	}
+	wlr_scene_node_set_enabled(&shell->camv->node, on);
+}
+
+int
+ng_shell_is_camera(struct ng_shell *shell)
+{
+	return shell && shell->camera_on;
+}
+
+int
+ng_shell_camera_tap(struct ng_shell *shell, double lx, double ly)
+{
+	if (!shell || !shell->camera_on)
+		return 0;
+	if (in_box(&shell->camv_back_box, lx, ly)) {
+		ng_shell_set_camera(shell, 0);
+		return 1;
+	}
+	if (in_box(&shell->camv_shot_box, lx, ly)) {
+		ng_spawn("command -v neuros-camera >/dev/null && neuros-camera shot || true");
+		return 1;
+	}
+	return 1;
 }
 
 void
@@ -714,4 +811,9 @@ ng_shell_layout(struct ng_shell *shell, int width, int height)
 	ng_shell_set_strip(shell, shell->strip_text);
 	ng_shell_set_strip_right(shell, shell->strip_right_text);
 	ng_shell_set_activity(shell, shell->activity_text);
+
+	if (shell->locked)
+		lock_layout(shell);
+	if (shell->camera_on)
+		camera_layout(shell);
 }

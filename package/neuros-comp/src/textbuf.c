@@ -515,13 +515,21 @@ ng_button_render(int d, int icon, const float bg[4], const float ring[4], const 
 		cov_arc(cov, d, d, IX(12), IY(11), 7.0f * u, 0.30f, 2.84f, th);      /* pickup arc */
 		cov_line(cov, d, d, IX(12), IY(18), IX(12), IY(22), th);
 		cov_line(cov, d, d, IX(8), IY(22), IX(16), IY(22), th);
+	} else if (icon == 4) {
+		/* close: an X */
+		cov_line(cov, d, d, IX(7), IY(7), IX(17), IY(17), th);
+		cov_line(cov, d, d, IX(17), IY(7), IX(7), IY(17), th);
+	} else if (icon == 5) {
+		/* shutter: two concentric rings */
+		cov_arc(cov, d, d, IX(12), IY(12), 8.5f * u, 0, 6.2832f, th);
+		cov_arc(cov, d, d, IX(12), IY(12), 5.8f * u, 0, 6.2832f, 3.0f * u);
 	} else {
 		/* padlock: body (5..19 x 11..21) + shackle arc.  icon==2 locked,
 		 * icon==3 open (shackle swung out) */
 		cov_line(cov, d, d, IX(5.5f), IY(11), IX(18.5f), IY(11), th);
 		cov_line(cov, d, d, IX(5.5f), IY(21), IX(18.5f), IY(21), th);
 		cov_line(cov, d, d, IX(5.5f), IY(11), IX(5.5f), IY(21), th);
-		cov_line(cov, d, d, IX(18.5f), IY(11), IX(18.5f), IY(21), th);
+		cov_line(cov, d, d, IX(18.5f), IY(21), IX(18.5f), IY(11), th);
 		if (icon == 3) {
 			cov_arc(cov, d, d, IX(15), IY(11), 4.0f * u, 3.1416f, 4.9f, th);
 		} else {

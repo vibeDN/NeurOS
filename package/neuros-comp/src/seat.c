@@ -544,6 +544,11 @@ handle_touch_down(struct wl_listener *listener, void *data)
 			wlr_idle_notifier_v1_notify_activity(seat->server->idle, seat->seat);
 			return;
 		}
+		if (ng_shell_is_camera(sh)) {
+			ng_shell_camera_tap(sh, lx, ly);
+			wlr_idle_notifier_v1_notify_activity(seat->server->idle, seat->seat);
+			return;
+		}
 		int b = ng_shell_button_at(sh, lx, ly);
 		if (b) {
 			ng_shell_press_button(sh, b);
@@ -663,6 +668,11 @@ handle_cursor_button(struct wl_listener *listener, void *data)
 		struct ng_shell *sh = seat->server->shell;
 		if (ng_shell_is_locked(sh)) {
 			ng_shell_lock_tap(sh, seat->cursor->x, seat->cursor->y);
+			wlr_idle_notifier_v1_notify_activity(seat->server->idle, seat->seat);
+			return;
+		}
+		if (ng_shell_is_camera(sh)) {
+			ng_shell_camera_tap(sh, seat->cursor->x, seat->cursor->y);
 			wlr_idle_notifier_v1_notify_activity(seat->server->idle, seat->seat);
 			return;
 		}
