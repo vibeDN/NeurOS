@@ -8,21 +8,27 @@
 #
 ################################################################################
 
-CLAUDE_CODE_VERSION = 2.1.260
+# Host installs auto-update, so this is just a label - the binary that actually
+# ships is whatever CLAUDE_CODE_BIN resolves to below.
+CLAUDE_CODE_VERSION = host
 CLAUDE_CODE_SITE = $(BR2_EXTERNAL_NEUROS_PATH)/package/claude-code
 CLAUDE_CODE_SITE_METHOD = local
 CLAUDE_CODE_LICENSE = Commercial (Anthropic)
 CLAUDE_CODE_REDISTRIBUTE = NO
 
-# Where to find the native binary on the build host. Override on the CLI if your
-# install lives elsewhere:  make CLAUDE_CODE_BIN=/opt/claude/claude
-CLAUDE_CODE_BIN ?= $(HOME)/.local/share/claude/versions/$(CLAUDE_CODE_VERSION)
+# The native binary on the build host. Default: the newest version under the
+# standard install dir (`~/.local/share/claude/versions/<ver>`, plain files).
+# Override on the CLI if your install lives elsewhere:
+#   make CLAUDE_CODE_BIN=/opt/claude/claude
+CLAUDE_CODE_BIN ?= $(shell ls -1t $(HOME)/.local/share/claude/versions/* 2>/dev/null | head -n1)
 
 define CLAUDE_CODE_BUILD_CMDS
-	test -x "$(CLAUDE_CODE_BIN)" || { \
-		echo "claude-code: no binary at $(CLAUDE_CODE_BIN)"; \
-		echo "  install Claude Code on the host, or pass CLAUDE_CODE_BIN=/path"; \
+	test -n "$(CLAUDE_CODE_BIN)" && test -x "$(CLAUDE_CODE_BIN)" || { \
+		echo "claude-code: no host binary found"; \
+		echo "  looked in ~/.local/share/claude/versions/ - install Claude Code"; \
+		echo "  on the host, or pass CLAUDE_CODE_BIN=/path"; \
 		exit 1; }
+	@echo "claude-code: shipping $(CLAUDE_CODE_BIN)"
 endef
 
 define CLAUDE_CODE_INSTALL_TARGET_CMDS
