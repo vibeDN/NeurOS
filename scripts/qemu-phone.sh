@@ -31,11 +31,12 @@ start)
 		echo "already running (pid $(cat "$PIDF"))"; exit 0
 	fi
 	KVM=(); [ -w /dev/kvm ] && KVM=(-enable-kvm -cpu host)
+	# grub in the image loads `root=/dev/sda1` -> attach as IDE/AHCI, not virtio.
 	nohup qemu-system-x86_64 "${KVM[@]}" \
 		-m 6144 -smp 4 \
-		-drive file="$IMG",format=raw,if=virtio \
-		-device virtio-vga -display none -vnc :9 \
-		-netdev user,id=n,hostfwd=tcp::2223-:22 -device virtio-net,netdev=n \
+		-drive file="$IMG",format=raw,if=ide \
+		-vga virtio -display none -vnc :9 \
+		-netdev user,id=n,hostfwd=tcp::2223-:22 -device e1000,netdev=n \
 		-smbios type=1,product=NeurOS-phone-1080x2400 \
 		-serial file:"$RUN/serial.log" \
 		-qmp unix:"$QMP",server,nowait \
