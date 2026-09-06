@@ -411,10 +411,14 @@ minimal Android property/HAL container (for camera). Packaged in this BR2_EXTERN
   ffmpeg branch; dev VM runs the synthetic test pattern.
 - Live-mic capture link end to end (no mic in the headless VM - only the
   whisper+VAD half is verified).
-- OSK polish: long-press for accented/alt chars; a globe long-press layout
-  picker; wire a hardware button -> `neuros-ctl kbd toggle`. Move the
-  centre-panel [camera]/[mic] buttons clear of the keyboard when it's up.
-  *(buttons-clear-of-keyboard: done, batch 9.)*
+- OSK polish: long-press accent chars *(done, batch 11 - Group4 keymap,
+  a/e/i/o/u/y/n/c/s/z -> accented forms, drag-to-select)*; globe long-press
+  layout picker *(done, batch 11 - EN/RU/?12/emoji)*. Still open: long-press
+  alts on the ?123 symbol layer (- -> en/em dash, . -> ..., smart quotes -
+  needs Group4 slots parked on the digit keycodes, which are currently free);
+  wire a hardware button -> `neuros-ctl kbd toggle` (all 3 side keys are
+  already assigned - would need a double-tap or a 4th key).
+  Centre-panel [camera]/[mic] buttons clear of the keyboard: done, batch 9.
 - Pick the exact newest-stable HyperOS fastboot ROM build for sweet.
 - Claw'd mascot: rights request sent to Anthropic (pending).
 

@@ -82,12 +82,13 @@ static const uint32_t EMOJI[42] = {
 
 static size_t u8dec(const char *s, uint32_t *cp);
 
-/* --- long-press accent alternates ----------------------------------- *
- * Holding a base letter pops up its accented forms. xkb allows at most 4
- * groups/key and we already use 3 (EN / RU / emoji), so there's room for
- * exactly one more: each accent codepoint is parked in xkb Group4 on its
- * own keycode (32 letter keycodes -> 32 slots), and the popup sends that
- * keycode in Group4 so the client resolves the real character. */
+/* --- long-press alternates ------------------------------------------ *
+ * Holding a key pops up its alternates - accented forms for a letter,
+ * dashes / curly quotes for a symbol. xkb allows at most 4 groups/key and
+ * we already use 3 (EN / RU / emoji), so there's room for exactly one
+ * more: every alternate codepoint is parked in xkb Group4 on its own
+ * keycode (accents on the 32 letter keycodes, symbols on the 10 digit
+ * keycodes), and the popup sends that keycode in Group4. */
 struct accent_set {
 	char base;
 	const char *alts; /* UTF-8, most-common first */
@@ -106,20 +107,40 @@ static const struct accent_set ACCENTS[] = {
 	{0, NULL},
 };
 
-/* accent codepoint parked at each of the 42 keycodes in xkb Group4, or 0 */
+/* long-press alternates on the ?123 / #+= symbol layers. Parked in Group4 on
+ * the digit keycodes (AE01..), which the accent table (letter keycodes) leaves
+ * free. 9 codepoints -> slots 32..40. */
+static const struct accent_set SYMALTS[] = {
+	{'-', "–—"},   /* en dash, em dash */
+	{'.', "…"},     /* ellipsis */
+	{'?', "¿"},     /* inverted question */
+	{'!', "¡"},     /* inverted bang */
+	{'"', "“”"}, /* curly double quotes */
+	{'\'', "‘’"}, /* curly single quotes */
+	{0, NULL},
+};
+
+/* accent/symbol codepoint parked at each of the 42 keycodes in xkb Group4 */
 static uint32_t g_acc[42];
 
 static void
-build_accents(void)
+fill_alts(const struct accent_set *tbl, int start)
 {
-	memset(g_acc, 0, sizeof(g_acc));
-	int i = 0;
-	for (const struct accent_set *as = ACCENTS; as->base; as++)
+	int i = start;
+	for (const struct accent_set *as = tbl; as->base; as++)
 		for (const char *q = as->alts; *q && i < 42;) {
 			uint32_t cp;
 			q += u8dec(q, &cp);
 			g_acc[i++] = cp;
 		}
+}
+
+static void
+build_accents(void)
+{
+	memset(g_acc, 0, sizeof(g_acc));
+	fill_alts(ACCENTS, 0);  /* letter keycodes 0..31 */
+	fill_alts(SYMALTS, 32); /* digit keycodes 32..41 */
 }
 
 /* keycode index (build order: AD*12, AC*11, AB*9, AE*10) -> evdev code */
@@ -135,20 +156,33 @@ acc_evdev(int kci)
 	return AE_C[kci - 32];
 }
 
-/* alternates for a base label; fills code[]/lbl[] (all in Group4), returns n */
-static int
-accent_lookup(char base, uint16_t *code, char lbl[][8], int max)
+/* the alternates string for a key on the current layer, or NULL:
+ * letters a..z on the EN layer, punctuation on the ?123 / #+= layers. */
+static const char *
+key_alts(enum layer layer, struct key *k)
 {
-	const struct accent_set *as = NULL;
-	for (const struct accent_set *p = ACCENTS; p->base; p++)
-		if (p->base == base) {
-			as = p;
-			break;
-		}
-	if (!as)
-		return 0;
+	if (!k || k->kind != KK_CHAR || k->lbl[1])
+		return NULL;
+	char c = k->lbl[0];
+	const struct accent_set *tbl = NULL;
+	if (layer == LY_EN && k->group == 0 && c >= 'a' && c <= 'z')
+		tbl = ACCENTS;
+	else if (layer == LY_SYM || layer == LY_SYM2)
+		tbl = SYMALTS;
+	if (!tbl)
+		return NULL;
+	for (const struct accent_set *p = tbl; p->base; p++)
+		if (p->base == c)
+			return p->alts;
+	return NULL;
+}
+
+/* resolve an alternates string to Group4 (code, label) pairs; returns n */
+static int
+alts_resolve(const char *alts, uint16_t *code, char lbl[][8], int max)
+{
 	int n = 0;
-	for (const char *q = as->alts; *q && n < max;) {
+	for (const char *q = alts; *q && n < max;) {
 		uint32_t cp;
 		size_t len = u8dec(q, &cp);
 		for (int i = 0; i < 42 && n < max; i++)
@@ -845,19 +879,7 @@ key_at(struct ng_osk *osk, double lx, double ly)
 	return NULL;
 }
 
-/* -- long-press accent popup ------------------------------------------- */
-
-/* base letter this key long-presses to accents, or 0 (EN letters only) */
-static char
-accent_base(struct ng_osk *osk, struct key *k)
-{
-	if (!k || k->kind != KK_CHAR || osk->layer != LY_EN || k->group != 0)
-		return 0;
-	char c = k->lbl[0];
-	if (k->lbl[1] || c < 'a' || c > 'z')
-		return 0;
-	return c;
-}
+/* -- long-press alternates popup -------------------------------------- */
 
 static void
 osk_cancel_hold(struct ng_osk *osk)
@@ -913,13 +935,13 @@ osk_popup_show(struct ng_osk *osk, struct key *src, int n, int mode)
 }
 
 static void
-osk_open_accent_popup(struct ng_osk *osk, struct key *src)
+osk_open_char_popup(struct ng_osk *osk, struct key *src)
 {
-	char base = accent_base(osk, src);
-	if (!base)
+	const char *alts = key_alts(osk->layer, src);
+	if (!alts)
 		return;
 	uint16_t code[10];
-	int n = accent_lookup(base, code, osk->popup_lbl, 10);
+	int n = alts_resolve(alts, code, osk->popup_lbl, 10);
 	if (n < 1)
 		return;
 	for (int i = 0; i < n; i++)
@@ -951,7 +973,7 @@ osk_hold_cb(void *data)
 	if (k->kind == KK_LANG)
 		osk_open_layout_popup(osk, k);
 	else
-		osk_open_accent_popup(osk, k);
+		osk_open_char_popup(osk, k);
 	return 0;
 }
 
@@ -1029,7 +1051,7 @@ ng_osk_press(struct ng_osk *osk, double lx, double ly)
 	switch (k->kind) {
 	case KK_CHAR: {
 		bool sh = k->shift || (osk->layer == LY_EN && osk->shift);
-		if (accent_base(osk, k))
+		if (key_alts(osk->layer, k))
 			osk_arm_hold(osk, k); /* accent-capable: commit on release */
 		else
 			osk_key_down(osk, k->code, sh, k->group); /* held -> client repeats */
