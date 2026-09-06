@@ -11,7 +11,7 @@ gated on the bootloader unlock (see the `sweet BL unlock` memory).
 | M0 build chain | done | Bootlin external toolchain, systemd PID 1, ssh |
 | M1 graphics    | done | mesa 26 + llvmpipe, wlroots 0.19, `neuros-comp` (cage fork) |
 | M2 UI shell    | done + polished | see below |
-| M3 agent       | proto | `mock-agent` in tmux -> status/activity panes; real Claude Code still TODO |
+| M3 agent       | proto+ | real Claude Code 2.1.263 now boots in the centre pane (`package/claude-code` ships the host binary); orchestration still the mock-agent shell |
 | M4 audio       | done | full voice loop (piper TTS buffered, whisper-small + Silero VAD) |
 | M5 aarch64/sweet | not started | needs the unlock + device bringup |
 | M6 first flash | blocked | unlock window slipped (timer reset to ~287 h) |
@@ -45,14 +45,19 @@ gated on the bootloader unlock (see the `sweet BL unlock` memory).
 `mic` · `camera on|off|toggle` · `lock` / `unlock` / `lock "HH:MM|..."` ·
 `screen on|off|toggle` · `power [hide]` · `kbd tap|press|release|toggle|on|off`
 
+## Verified in QEMU 2026-09-06 (fresh Debian build)
+
+Boots at 1080x2400, pixman renderer. Screenshots: Claude Code running in the
+centre pane; OSK long-press accents (`e`->è é ê ë), globe->layout picker
+(EN/RU/?12/:)), symbol alts (`-`->– —); settings overlay. `scripts/qemu-phone.sh`.
+
 ## Current blockers / TODO
 
-- **Dev host migrated Gentoo -> Debian 13** - `output/` is being rebuilt from
-  scratch (host tree was linked against a newer glibc). See
-  `docs/DEBIAN-MIGRATION.md`. VM verification of the latest OSK work is pending
-  that rebuild.
-- **`wpewebkit`** (`fa3858f`, WIP browser) - fails host `FindRuby`; needs the
-  Debian `ruby` pkg + `PATH` care. Temporarily disabled once to get an image.
+- **Dev host migrated Gentoo -> Debian 13** - full `output/` rebuild done and
+  working. See `docs/DEBIAN-MIGRATION.md`.
+- **`wpewebkit`** (`fa3858f`, WIP browser) - `FindRuby` (fixed: install `ruby`)
+  **and OOMs a 16 GB box** during the WebCore compile. Disabled in `.config` for
+  now; needs `BR2_JLEVEL=1` / big swap / a bigger machine.
 - **Real Claude Code** in the image (Node + auth) - `mock-agent` stands in.
 - **`ext-session-lock-v1`** - deferred (input is already contained).
 - Live-mic capture, camera `/dev/video0`, erofs ro-root + f2fs data - all still open.

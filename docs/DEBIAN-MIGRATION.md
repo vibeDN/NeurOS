@@ -51,10 +51,28 @@ sudo usermod -aG vboxusers "$USER"          # then re-login / `newgrp vboxusers`
 
 ## Known-broken packages after migration
 
-- **`wpewebkit`** (`fa3858f`, WIP): CMake `FindRuby` failed with no `ruby` on the
-  host - install Debian `ruby`. It also picks up the **system** `/usr/bin/cmake`
-  for `--regenerate-during-build`; keep `output/host/bin` early in `PATH` when
-  poking the build by hand.
+- **`wpewebkit`** (`fa3858f`, WIP):
+  - CMake `FindRuby` failed with no `ruby` on the host - install Debian `ruby`.
+  - It picks up the **system** `/usr/bin/cmake` for `--regenerate-during-build`;
+    keep `output/host/bin` early in `PATH` when poking the build by hand.
+  - **OOMs a 16 GB box.** WebKit's parallel C++ compile needs many GB/job;
+    `BR2_JLEVEL=6` + a desktop = kernel OOM-kill mid-`WebCore`. To build it you
+    need `BR2_JLEVEL=1`, tens of GB of swap, or a bigger machine. Until then
+    disable it in `output/.config` (`BR2_PACKAGE_COG` / `WPEWEBKIT` /
+    `WPEBACKEND_FDO` / `LIBWPE` off, then `make olddefconfig`) to get an image.
+- **`claude-code`**: pinned to a host binary version that no longer exists after
+  updates - fixed in `3a7a1e3` to take the newest under
+  `~/.local/share/claude/versions/`.
+
+## Runtime fixes for the rebuilt image (`e646fa1`)
+
+- `neuros-session` forced `LIBSEAT_BACKEND=builtin`, but the defconfig only
+  builds the seatd **daemon** backend -> compositor crash-loop
+  (`No backend matched name 'builtin'`). Now auto-probes.
+- `WLR_RENDERER=gles2` + `LIBGL_ALWAYS_SOFTWARE=1` SEGVs in EGL on mesa 26 when
+  the vGPU advertises hardware ("Not allowed to force software rendering ...").
+  Default is now the **pixman** renderer (software, no EGL). gles2 for the phone
+  via `/etc/neuros/display.conf`.
 
 ## Incremental `neuros-comp` builds without a working host meson
 
