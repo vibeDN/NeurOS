@@ -100,6 +100,9 @@ Releasing **before** the timer fires = a normal tap of the base key. Moving the
 finger more than ~`keyh/3 + 6` px before it fires cancels the hold (you were
 swipe-typing, not long-pressing).
 
+A firm, mostly-vertical **downward swipe** across the keys (`> area_h/3`, steeper
+than ~63°) hides the keyboard - handled in `ng_osk_motion`.
+
 ## Input routing (`seat.c`)
 
 ```

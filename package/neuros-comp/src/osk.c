@@ -431,6 +431,10 @@ struct ng_osk {
 	char popup_lbl[10][8];
 	enum layer popup_layer[10]; /* popup_mode 1: target layer per cell */
 	struct wlr_box popup_area;
+
+	/* space-bar cursor control: hold space, drag to move the caret */
+	bool space_cursor;
+	double space_anchor; /* lx the last arrow key was sent at */
 };
 
 static const struct wlr_keyboard_impl kb_impl = {.name = "neuros-osk"};
@@ -820,6 +824,7 @@ ng_osk_layout(struct ng_osk *osk, int w, int h)
 	osk_cancel_hold(osk);
 	osk->popup = false;
 	osk->popup_n = 0;
+	osk->space_cursor = false;
 	osk->w = w;
 	osk->h = h;
 	int margin = w / 40;
@@ -850,6 +855,7 @@ ng_osk_set_visible(struct ng_osk *osk, bool visible)
 	osk_cancel_hold(osk);
 	osk->popup = false;
 	osk->popup_n = 0;
+	osk->space_cursor = false;
 	osk->pressed = NULL;
 	osk->visible = visible;
 	if (visible) {
@@ -981,10 +987,14 @@ osk_hold_cb(void *data)
 	osk->hold_key = NULL;
 	if (!osk->visible || !k)
 		return 0;
-	if (k->kind == KK_LANG)
+	if (k->kind == KK_SPACE) {
+		osk->space_cursor = true; /* now a caret trackpad; drag -> arrows */
+		osk->space_anchor = osk->press_lx;
+	} else if (k->kind == KK_LANG) {
 		osk_open_layout_popup(osk, k);
-	else
+	} else {
 		osk_open_char_popup(osk, k);
+	}
 	return 0;
 }
 
@@ -1025,7 +1035,29 @@ ng_osk_motion(struct ng_osk *osk, double lx, double ly)
 		}
 		return;
 	}
-	if (osk->hold_key) {
+	if (osk->space_cursor) {
+		/* drag the space bar -> nudge the caret one char per ~half-key */
+		int step = osk->area.width / 22;
+		if (step < 8)
+			step = 8;
+		while (lx - osk->space_anchor >= step) {
+			osk_send(osk, KEY_RIGHT, false, 0);
+			osk->space_anchor += step;
+		}
+		while (osk->space_anchor - lx >= step) {
+			osk_send(osk, KEY_LEFT, false, 0);
+			osk->space_anchor -= step;
+		}
+		return;
+	}
+	/* a firm, mostly-vertical downward swipe anywhere on the keys hides it */
+	if (!osk->popup && ly - osk->press_ly > osk->area.height / 3 &&
+	    fabs(lx - osk->press_lx) * 2.0 < ly - osk->press_ly) {
+		ng_osk_set_visible(osk, false); /* clears hold / pressed / repeat */
+		return;
+	}
+
+	if (osk->hold_key && osk->hold_key->kind != KK_SPACE) {
 		double dx = lx - osk->press_lx, dy = ly - osk->press_ly;
 		int slop = osk->hold_key->box.height / 3 + 6;
 		if (dx * dx + dy * dy > (double) slop * slop)
@@ -1072,7 +1104,7 @@ ng_osk_press(struct ng_osk *osk, double lx, double ly)
 		osk_key_down(osk, KEY_BACKSPACE, false, 0);
 		break;
 	case KK_SPACE:
-		osk_key_down(osk, KEY_SPACE, false, 0);
+		osk_arm_hold(osk, k); /* tap = space (on release); hold = caret trackpad */
 		break;
 	case KK_ENTER:
 		osk_send(osk, KEY_ENTER, false, 0); /* discrete - no repeat on return */
@@ -1125,6 +1157,13 @@ ng_osk_release(struct ng_osk *osk)
 	bool was_held = (osk->hold_key != NULL);
 	osk_cancel_hold(osk);
 
+	if (osk->space_cursor) { /* caret trackpad ended - no space emitted */
+		osk->space_cursor = false;
+		if (osk->visible)
+			osk_render(osk);
+		return;
+	}
+
 	if (osk->popup) {
 		if (osk->popup_hot >= 0 && osk->popup_hot < osk->popup_n) {
 			if (osk->popup_mode == 1) { /* layout picker */
@@ -1142,10 +1181,12 @@ ng_osk_release(struct ng_osk *osk)
 		return;
 	}
 	if (was_held && k) {
-		/* released before the popup opened -> treat as a normal tap */
+		/* released before the hold fired -> treat as a normal tap */
 		if (k->kind == KK_CHAR) {
 			bool sh = k->shift || (osk->layer == LY_EN && osk->shift);
 			osk_send(osk, k->code, sh, k->group);
+		} else if (k->kind == KK_SPACE) {
+			osk_send(osk, KEY_SPACE, false, 0);
 		} else if (k->kind == KK_LANG) {
 			osk->letter = (osk->letter == LY_EN) ? LY_RU : LY_EN;
 			osk->layer = osk->letter;
