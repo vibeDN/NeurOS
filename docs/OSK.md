@@ -76,14 +76,16 @@ Repeat rate: `wlr_keyboard_set_repeat_info(&osk->kb, 28, 480)`.
 ## Long-press
 
 `osk_arm_hold(osk, k)` starts a `wl_event_loop` timer (330 ms). If it fires
-before release, `osk_hold_cb` opens a popup:
+before release, `osk_hold_cb` opens a popup (or, for space, enters the caret
+trackpad):
 
-| held key                        | popup                                      |
+| held key                        | popup / action                             |
 |---------------------------------|--------------------------------------------|
 | letter a/e/i/o/u/y/n/c/s/z (EN) | accent forms - `ACCENTS` table             |
 | `-` `.` `?` `!` `"` `'` (SYM)   | `– —` / `…` / `¿` / `¡` / `“ ”` / `‘ ’` - `SYMALTS` |
 | `е` (RU)                        | `ё`                                        |
 | globe                           | layout picker: `EN` `RU` `?12` `:)`        |
+| **space**                       | caret trackpad - drag L/R sends `←`/`→` (one per ~half-key); release emits no space |
 
 `osk_popup_show()` lays the cells in a row over the source key (clamped to the
 keyboard rect, flips below the key if there's no room above) and picks the cell
