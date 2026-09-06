@@ -466,6 +466,25 @@ Vosk (Kaldi, streaming, per language): small ru/en ~40-50 MB disk, 250-500 MB
 RAM, very light CPU (used here only as VAD). Large models not on device.
 Piper TTS: ~20-65 MB/voice, ~50-150 MB RAM, faster than realtime.
 
+## Resolved (2026-09-06, batch 11) - OSK long-press
+
+- **Long-press accent chars.** Hold a/e/i/o/u/y/n/c/s/z on the EN layer ->
+  ~330 ms -> a card of accented forms over the key; drag onto a cell and
+  release to type it. Release before the card opens = a normal tap.
+- **Long-press the globe -> layout picker** (EN / RU / ?12 / :)), jumps
+  straight to any layer. Quick tap still does the EN<->RU toggle.
+- **Long-press symbol alternates** on ?123 / #+= : `-`->– —, `.`->…,
+  `?`->¿, `!`->¡, `"`->" ", `'`->' '.
+- Impl: xkb caps at 4 groups and 3 were used (EN/RU/emoji) -> all alternates
+  ride one new Group4, each codepoint parked on its own keycode (accents on
+  the 32 letter keycodes, symbols on the 10 digit keycodes). Accent-capable
+  keys commit on release so the hold timer can pre-empt them. `seat.c`
+  routes pointer/touch motion to `ng_osk_motion` while `osk_grab` is held
+  (drag-to-select + hold-slop cancel). Validated the 4-group keymap
+  compiles and every alternate round-trips through xkbcommon.
+- Commits: b02698d, 4e96eb7, 5a355d9. Built (`neuros-comp`, incremental);
+  not yet eyeballed in the VM.
+
 ## Resolved (2026-09-04, batch 8)
 
 - **Hardware side keys** (`seat.c` intercepts evdev 116/115/114 - power / vol
