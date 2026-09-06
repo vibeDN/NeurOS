@@ -104,6 +104,11 @@ handle_line(struct ng_ipc *ipc, char *line)
 		output_set_power(ipc->server, !off);
 	} else if (strcmp(line, "power") == 0) {
 		ng_shell_power_menu(shell, !(arg && strcmp(arg, "hide") == 0));
+	} else if (strcmp(line, "settings") == 0) {
+		int want = !(arg && strcmp(arg, "hide") == 0);
+		if (arg && strcmp(arg, "toggle") == 0)
+			want = !ng_shell_settings_is_open(shell);
+		ng_shell_settings_menu(shell, want);
 	} else if (strcmp(line, "camera") == 0) {
 		if (arg && strcmp(arg, "toggle") == 0)
 			ng_shell_set_camera(shell, !ng_shell_is_camera(shell));

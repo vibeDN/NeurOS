@@ -475,6 +475,16 @@ Piper TTS: ~20-65 MB/voice, ~50-150 MB RAM, faster than realtime.
   straight to any layer. Quick tap still does the EN<->RU toggle.
 - **Long-press symbol alternates** on ?123 / #+= : `-`->– —, `.`->…,
   `?`->¿, `!`->¡, `"`->" ", `'`->' '.
+- **Space-bar caret trackpad** - hold space, drag L/R -> `←`/`→` (one per
+  ~half-key); release emits no space. Replaces hold-to-repeat-space.
+
+### Settings overlay (batch 12, written pending build-verify)
+
+Compositor-drawn overlay on the power-menu pattern (`ng_shell_settings_*`,
+`shell->set` tree). Rows: Toggle TTS / Toggle mic / Lock now / Power-Restart /
+Close. `neuros-ctl settings [toggle|hide]`; tap-routed in `seat.c` before the
+lock check; auto-dismissed by `ng_shell_set_locked`. v1 is action rows only -
+no live on/off state, no sliders (WiFi / brightness need helper scripts first).
 - Impl: xkb caps at 4 groups and 3 were used (EN/RU/emoji) -> all alternates
   ride one new Group4, each codepoint parked on its own keycode (accents on
   the 32 letter keycodes, symbols on the 10 digit keycodes). Accent-capable

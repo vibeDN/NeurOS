@@ -666,6 +666,11 @@ handle_touch_down(struct wl_listener *listener, void *data)
 			wlr_idle_notifier_v1_notify_activity(seat->server->idle, seat->seat);
 			return;
 		}
+		if (ng_shell_settings_is_open(sh)) {
+			ng_shell_settings_tap(sh, lx, ly);
+			wlr_idle_notifier_v1_notify_activity(seat->server->idle, seat->seat);
+			return;
+		}
 		if (ng_shell_is_locked(sh)) {
 			ng_shell_lock_tap(sh, lx, ly);
 			wlr_idle_notifier_v1_notify_activity(seat->server->idle, seat->seat);
@@ -811,6 +816,11 @@ handle_cursor_button(struct wl_listener *listener, void *data)
 		struct ng_shell *sh = seat->server->shell;
 		if (ng_shell_power_is_open(sh)) {
 			ng_shell_power_tap(sh, seat->cursor->x, seat->cursor->y);
+			wlr_idle_notifier_v1_notify_activity(seat->server->idle, seat->seat);
+			return;
+		}
+		if (ng_shell_settings_is_open(sh)) {
+			ng_shell_settings_tap(sh, seat->cursor->x, seat->cursor->y);
 			wlr_idle_notifier_v1_notify_activity(seat->server->idle, seat->seat);
 			return;
 		}

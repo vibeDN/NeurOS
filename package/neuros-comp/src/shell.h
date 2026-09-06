@@ -98,6 +98,13 @@ struct ng_shell {
 	struct wlr_box pwr_box[3];
 	int pwr_open;
 
+	/* settings overlay */
+	struct wlr_scene_tree *set;
+	struct wlr_scene_rect *set_dim;
+	struct wlr_scene_buffer *set_btn[5];
+	struct wlr_box set_box[5];
+	int set_open;
+
 	/* camera mode - full-panel viewfinder over the centre pane */
 	struct wlr_scene_tree *camv;
 	struct wlr_scene_rect *camv_dim;
@@ -160,5 +167,10 @@ int ng_shell_lock_tap(struct ng_shell *shell, double lx, double ly);
 void ng_shell_power_menu(struct ng_shell *shell, int open);
 int ng_shell_power_is_open(struct ng_shell *shell);
 int ng_shell_power_tap(struct ng_shell *shell, double lx, double ly);
+
+/* Settings overlay (`neuros-ctl settings`). */
+void ng_shell_settings_menu(struct ng_shell *shell, int open);
+int ng_shell_settings_is_open(struct ng_shell *shell);
+int ng_shell_settings_tap(struct ng_shell *shell, double lx, double ly);
 
 #endif

@@ -277,6 +277,16 @@ ng_shell_create(struct cg_server *server)
 		wlr_scene_node_set_enabled(&shell->pwr->node, false);
 	}
 
+	/* settings overlay (same layer as the power menu) */
+	shell->set = wlr_scene_tree_create(&server->scene->tree);
+	if (shell->set) {
+		static const float sd[4] = {0.02f, 0.013f, 0.008f, 0.86f};
+		shell->set_dim = wlr_scene_rect_create(shell->set, 1, 1, sd);
+		for (int i = 0; i < 5; i++)
+			shell->set_btn[i] = wlr_scene_buffer_create(shell->set, NULL);
+		wlr_scene_node_set_enabled(&shell->set->node, false);
+	}
+
 	/* lockscreen tree - created last so it's above everything; starts hidden */
 	shell->lock = wlr_scene_tree_create(&server->scene->tree);
 	if (shell->lock) {
@@ -541,6 +551,78 @@ ng_shell_power_tap(struct ng_shell *shell, double lx, double ly)
 	return 1;
 }
 
+/* -- settings overlay --------------------------------------------------- */
+
+enum { SET_TTS, SET_MIC, SET_LOCK, SET_POWER, SET_CLOSE, SET_N };
+static const char *SET_LBL[SET_N] = {"Toggle TTS", "Toggle mic", "Lock now", "Power / Restart", "Close"};
+
+void
+ng_shell_settings_menu(struct ng_shell *shell, int open)
+{
+	if (!shell || !shell->set)
+		return;
+	open = (open && !shell->locked) ? 1 : 0; /* never over the lockscreen */
+	shell->set_open = open;
+	if (open) {
+		int W = shell->width, H = shell->height, cx = W / 2;
+		place(shell->set_dim, 0, 0, W, H);
+		int bw = W * 66 / 100, bh = H / 16, gap = H / 60;
+		int y0 = H / 2 - (SET_N * bh + (SET_N - 1) * gap) / 2;
+		struct fcft_font *f = shell->strip_font;
+		for (int i = 0; i < SET_N; i++) {
+			int y = y0 + i * (bh + gap);
+			shell->set_box[i] = (struct wlr_box){cx - bw / 2, y, bw, bh};
+			float col[4] = {1, 1, 1, i == SET_CLOSE ? 0.16f : 0.12f};
+			struct wlr_buffer *pb = ng_pill_render(bw, bh, bh / 2, col);
+			node_set(shell->set_btn[i], pb, cx - bw / 2, y);
+			if (f) {
+				struct wlr_buffer *t = ng_text_render(f, SET_LBL[i], TEXT_COLOR, NULL, NULL);
+				if (t) {
+					int tw = t->width, th = t->height;
+					wlr_buffer_drop(t);
+					struct wlr_buffer *pt = ng_pill_text_render(f, SET_LBL[i], TEXT_COLOR, col,
+										    (bw - tw) / 2, (bh - th) / 2);
+					node_set(shell->set_btn[i], pt, cx - (pt ? pt->width : bw) / 2, y);
+				}
+			}
+		}
+		wlr_scene_node_raise_to_top(&shell->set->node);
+	}
+	wlr_scene_node_set_enabled(&shell->set->node, open);
+}
+
+int
+ng_shell_settings_is_open(struct ng_shell *shell)
+{
+	return shell && shell->set_open;
+}
+
+int
+ng_shell_settings_tap(struct ng_shell *shell, double lx, double ly)
+{
+	if (!shell || !shell->set_open)
+		return 0;
+	if (in_box(&shell->set_box[SET_TTS], lx, ly)) {
+		ng_spawn("neuros-tts toggle");
+	} else if (in_box(&shell->set_box[SET_MIC], lx, ly)) {
+		ng_shell_set_mic(shell, !shell->mic_on);
+		ng_spawn("neuros-mic toggle");
+	} else if (in_box(&shell->set_box[SET_LOCK], lx, ly)) {
+		ng_shell_settings_menu(shell, 0);
+		ng_spawn("neuros-lock lock");
+		return 1;
+	} else if (in_box(&shell->set_box[SET_POWER], lx, ly)) {
+		ng_shell_settings_menu(shell, 0);
+		ng_shell_power_menu(shell, 1);
+		return 1;
+	} else {
+		ng_shell_settings_menu(shell, 0);
+		return 1;
+	}
+	ng_shell_settings_menu(shell, 0); /* toggle rows: act and dismiss */
+	return 1;
+}
+
 /* -- lockscreen (clock view -> 6-digit passcode) --------------------- */
 
 static const char *LOCK_KEYS[12] = {"1", "2", "3", "4", "5", "6", "7", "8", "9", "", "0", "del"};
@@ -707,6 +789,7 @@ ng_shell_set_locked(struct ng_shell *shell, int locked, const char *time, const 
 		/* the on-screen keyboard must not be reachable behind the lock */
 		if (shell->server && shell->server->osk)
 			ng_osk_set_visible(shell->server->osk, false);
+		ng_shell_settings_menu(shell, 0); /* nor the settings overlay */
 		lock_layout(shell);
 		wlr_scene_node_raise_to_top(&shell->lock->node);
 	}
