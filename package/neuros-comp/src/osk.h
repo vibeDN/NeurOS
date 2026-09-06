@@ -32,6 +32,10 @@ bool ng_osk_tap(struct ng_osk *osk, double lx, double ly);
 bool ng_osk_press(struct ng_osk *osk, double lx, double ly);
 void ng_osk_release(struct ng_osk *osk);
 
+/* Pointer/touch drag while a press is held (osk_grab). Drives the long-press
+ * accent popup: opens after a hold, then tracks the finger across the cells. */
+void ng_osk_motion(struct ng_osk *osk, double lx, double ly);
+
 /* Y of the keyboard's top edge when visible (screen coords), or `h` when
  * hidden - the shell shrinks the client above this. */
 int ng_osk_top(struct ng_osk *osk);

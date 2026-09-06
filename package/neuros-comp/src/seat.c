@@ -125,6 +125,14 @@ osk_handle_press(struct cg_seat *seat, double lx, double ly)
 	return false;
 }
 
+/* drag while ng_osk_press holds the grab - feeds the accent long-press popup */
+static void
+osk_handle_motion(struct cg_seat *seat, double lx, double ly)
+{
+	if (seat->osk_grab && seat->server->osk)
+		ng_osk_motion(seat->server->osk, lx, ly);
+}
+
 /* release the finger/click that ng_osk_press grabbed */
 static bool
 osk_handle_release(struct cg_seat *seat)
@@ -735,6 +743,16 @@ handle_touch_motion(struct wl_listener *listener, void *data)
 	double lx, ly;
 	wlr_cursor_absolute_to_layout_coords(seat->cursor, &event->touch->base, event->x, event->y, &lx, &ly);
 
+	if (seat->osk_grab) {
+		osk_handle_motion(seat, lx, ly);
+		if (event->touch_id == seat->touch_id) {
+			seat->touch_lx = lx;
+			seat->touch_ly = ly;
+		}
+		wlr_idle_notifier_v1_notify_activity(seat->server->idle, seat->seat);
+		return;
+	}
+
 	double sx, sy;
 	struct wlr_surface *surface;
 	struct cg_view *view = desktop_view_at(seat->server, lx, ly, &surface, &sx, &sy);
@@ -834,6 +852,12 @@ process_cursor_motion(struct cg_seat *seat, uint32_t time_msec, double dx, doubl
 	double sx, sy;
 	struct wlr_seat *wlr_seat = seat->seat;
 	struct wlr_surface *surface = NULL;
+
+	if (seat->osk_grab) {
+		osk_handle_motion(seat, seat->cursor->x, seat->cursor->y);
+		wlr_idle_notifier_v1_notify_activity(seat->server->idle, seat->seat);
+		return;
+	}
 
 	struct cg_view *view = desktop_view_at(seat->server, seat->cursor->x, seat->cursor->y, &surface, &sx, &sy);
 	if (!view) {

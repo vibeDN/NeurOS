@@ -80,14 +80,106 @@ static const uint32_t EMOJI[42] = {
 	0x1F50B, 0x1F4A1, 0x1F512, 0x1F916, 0x1F680, 0x2615, 0x1F3A7, 0x2705, 0x2B50, 0x26A1, /* digits 10 */
 };
 
-static char *
-km_line(char *p, char *end, const char *xkname, const char *g1, const char *g2, uint32_t emoji)
+static size_t u8dec(const char *s, uint32_t *cp);
+
+/* --- long-press accent alternates ----------------------------------- *
+ * Holding a base letter pops up its accented forms. xkb allows at most 4
+ * groups/key and we already use 3 (EN / RU / emoji), so there's room for
+ * exactly one more: each accent codepoint is parked in xkb Group4 on its
+ * own keycode (32 letter keycodes -> 32 slots), and the popup sends that
+ * keycode in Group4 so the client resolves the real character. */
+struct accent_set {
+	char base;
+	const char *alts; /* UTF-8, most-common first */
+};
+static const struct accent_set ACCENTS[] = {
+	{'a', "àáâä"}, /* à á â ä */
+	{'e', "èéêë"},     /* è é ê ë */
+	{'i', "ìíîï"},     /* ì í î ï */
+	{'o', "òóôö"}, /* ò ó ô ö */
+	{'u', "ùúûü"},      /* ù ú û ü */
+	{'y', "ýÿ"},                   /* ý ÿ */
+	{'n', "ñ"},                       /* ñ */
+	{'c', "çč"},                   /* ç č */
+	{'s', "ß"},                       /* ß */
+	{'z', "ž"},                       /* ž */
+	{0, NULL},
+};
+
+/* accent codepoint parked at each of the 42 keycodes in xkb Group4, or 0 */
+static uint32_t g_acc[42];
+
+static void
+build_accents(void)
 {
-	return p + snprintf(p, end - p, "  override key <%s> { [ %s ], [ %s ], [ U%04X ] };\n", xkname, g1, g2,
-			    emoji);
+	memset(g_acc, 0, sizeof(g_acc));
+	int i = 0;
+	for (const struct accent_set *as = ACCENTS; as->base; as++)
+		for (const char *q = as->alts; *q && i < 42;) {
+			uint32_t cp;
+			q += u8dec(q, &cp);
+			g_acc[i++] = cp;
+		}
 }
 
-/* Build the 3-group keymap. Returns a malloc'd string. */
+/* keycode index (build order: AD*12, AC*11, AB*9, AE*10) -> evdev code */
+static uint16_t
+acc_evdev(int kci)
+{
+	if (kci < 12)
+		return AD_C[kci];
+	if (kci < 23)
+		return AC_C[kci - 12];
+	if (kci < 32)
+		return AB_C[kci - 23];
+	return AE_C[kci - 32];
+}
+
+/* alternates for a base label; fills code[]/lbl[] (all in Group4), returns n */
+static int
+accent_lookup(char base, uint16_t *code, char lbl[][8], int max)
+{
+	const struct accent_set *as = NULL;
+	for (const struct accent_set *p = ACCENTS; p->base; p++)
+		if (p->base == base) {
+			as = p;
+			break;
+		}
+	if (!as)
+		return 0;
+	int n = 0;
+	for (const char *q = as->alts; *q && n < max;) {
+		uint32_t cp;
+		size_t len = u8dec(q, &cp);
+		for (int i = 0; i < 42 && n < max; i++)
+			if (g_acc[i] == cp) { /* where build_accents parked it */
+				memcpy(lbl[n], q, len);
+				lbl[n][len] = 0;
+				code[n] = acc_evdev(i);
+				n++;
+				break;
+			}
+		q += len;
+	}
+	return n;
+}
+
+/* xkb layout index of Group4 (0-based: EN=0, RU=1, emoji=2, accents=3) */
+#define ACC_GROUP 3
+
+static char *
+km_line(char *p, char *end, const char *xkname, const char *g1, const char *g2, uint32_t emoji, uint32_t acc)
+{
+	char e4[12];
+	if (acc)
+		snprintf(e4, sizeof(e4), "U%04X", acc);
+	else
+		snprintf(e4, sizeof(e4), "NoSymbol");
+	return p + snprintf(p, end - p, "  override key <%s> { [ %s ], [ %s ], [ U%04X ], [ %s ] };\n", xkname, g1,
+			    g2, emoji, e4);
+}
+
+/* Build the 4-group keymap. Returns a malloc'd string. */
 static char *
 build_keymap(void)
 {
@@ -102,7 +194,9 @@ build_keymap(void)
 		      "xkb_compat   { include \"complete\" };\n"
 		      "xkb_symbols {\n"
 		      "  name[Group1]=\"English\";\n  name[Group2]=\"Russian\";\n  name[Group3]=\"Emoji\";\n"
+		      "  name[Group4]=\"Accents\";\n"
 		      "  include \"pc+us+inet(evdev)\"\n");
+	build_accents();
 	static const char *AD_XK[] = {"AD01", "AD02", "AD03", "AD04", "AD05", "AD06",
 				      "AD07", "AD08", "AD09", "AD10", "AD11", "AD12"};
 	static const char *AC_XK[] = {"AC01", "AC02", "AC03", "AC04", "AC05", "AC06",
@@ -116,26 +210,25 @@ build_keymap(void)
 		g1[0] = EN_AD[i];
 		g1[1] = 0;
 		const char *sym = (EN_AD[i] == '[') ? "bracketleft" : (EN_AD[i] == ']') ? "bracketright" : g1;
-		p = km_line(p, end, AD_XK[i], sym, RU_AD_SYM[i], EMOJI[e++]);
+		p = km_line(p, end, AD_XK[i], sym, RU_AD_SYM[i], EMOJI[e++], g_acc[i]);
 	}
 	for (int i = 0; i < 11; i++) {
 		g1[0] = EN_AC[i];
 		g1[1] = 0;
 		const char *sym = (EN_AC[i] == ';') ? "semicolon" : (EN_AC[i] == '\'') ? "apostrophe" : g1;
-		p = km_line(p, end, AC_XK[i], sym, RU_AC_SYM[i], EMOJI[e++]);
+		p = km_line(p, end, AC_XK[i], sym, RU_AC_SYM[i], EMOJI[e++], g_acc[12 + i]);
 	}
 	for (int i = 0; i < 9; i++) {
 		g1[0] = EN_AB[i];
 		g1[1] = 0;
 		const char *sym = (EN_AB[i] == ',') ? "comma" : (EN_AB[i] == '.') ? "period" : g1;
-		p = km_line(p, end, AB_XK[i], sym, RU_AB_SYM[i], EMOJI[e++]);
+		p = km_line(p, end, AB_XK[i], sym, RU_AB_SYM[i], EMOJI[e++], g_acc[23 + i]);
 	}
 	for (int i = 0; i < 10; i++) {
 		char d[2] = {(char) ('1' + (i == 9 ? -1 : i)), 0}; /* 1..9,0 */
 		if (i == 9)
 			d[0] = '0';
-		p += snprintf(p, end - p, "  override key <%s> { [ %s ], [ %s ], [ U%04X ] };\n", AE_XK[i], d, d,
-			      EMOJI[e++]);
+		p = km_line(p, end, AE_XK[i], d, d, EMOJI[e++], g_acc[32 + i]);
 	}
 	/* extra symbols on the F-keys, group 3 (the #+= layer reaches these) */
 	static const char *FK_XK[] = {"FK01", "FK02", "FK03", "FK04", "FK05",
@@ -280,6 +373,16 @@ struct ng_osk {
 	uint16_t held_code;      /* char key currently held down for repeat, 0 = none */
 	uint8_t held_group;
 	bool held_shift;
+
+	/* long-press accent popup */
+	struct wl_event_source *hold_timer;
+	struct key *hold_key;    /* accent-capable KK_CHAR key awaiting the timer */
+	double press_lx, press_ly;
+	bool popup;
+	int popup_n, popup_hot;  /* hot = cell under the finger, -1 = none */
+	struct key popup_keys[10];
+	char popup_lbl[10][8];
+	struct wlr_box popup_area;
 };
 
 static const struct wlr_keyboard_impl kb_impl = {.name = "neuros-osk"};
@@ -495,6 +598,9 @@ osk_font(int keyh)
 	return fcft_from_name(2, n, attr);
 }
 
+static void osk_cancel_hold(struct ng_osk *osk);
+static void osk_close_popup(struct ng_osk *osk);
+
 static void
 osk_render(struct ng_osk *osk)
 {
@@ -561,6 +667,28 @@ osk_render(struct ng_osk *osk)
 			x += kw + gap;
 		}
 	}
+
+	/* accent long-press popup: a dark card floating over the key row */
+	if (osk->popup && osk->popup_n > 0) {
+		struct wlr_box pa = osk->popup_area;
+		struct wlr_box panel = {pa.x - osk->area.x - gap, pa.y - osk->area.y - gap, pa.width + 2 * gap,
+					pa.height + 2 * gap};
+		for (int yy = panel.y; yy < panel.y + panel.height && yy < H; yy++) {
+			if (yy < 0)
+				continue;
+			for (int xx = panel.x; xx < panel.x + panel.width && xx < W; xx++)
+				if (xx >= 0)
+					data[yy * W + xx] = premul(0.05f, 0.04f, 0.03f, 0.94f);
+		}
+		fill_rr(data, W, H, panel, krad + 2, 0.10f); /* faint rim */
+		for (int i = 0; i < osk->popup_n; i++) {
+			struct wlr_box b = osk->popup_keys[i].box;
+			struct wlr_box lb = {b.x - osk->area.x, b.y - osk->area.y, b.width, b.height};
+			fill_rr(data, W, H, lb, krad, i == osk->popup_hot ? 0.5f : 0.14f);
+			draw_label(data, W, H, font, osk->popup_keys[i].lbl, lb, 0.95f);
+		}
+	}
+
 	if (font)
 		fcft_destroy(font);
 
@@ -627,6 +755,8 @@ ng_osk_destroy(struct ng_osk *osk)
 {
 	if (!osk)
 		return;
+	if (osk->hold_timer)
+		wl_event_source_remove(osk->hold_timer);
 	if (osk->kb_ready)
 		wlr_keyboard_finish(&osk->kb);
 	if (osk->tree)
@@ -639,6 +769,9 @@ ng_osk_layout(struct ng_osk *osk, int w, int h)
 {
 	if (!osk || w < 32 || h < 32)
 		return;
+	osk_cancel_hold(osk);
+	osk->popup = false;
+	osk->popup_n = 0;
 	osk->w = w;
 	osk->h = h;
 	int margin = w / 40;
@@ -666,6 +799,9 @@ ng_osk_set_visible(struct ng_osk *osk, bool visible)
 		return;
 	if (osk->held_code)
 		osk_key_up(osk);
+	osk_cancel_hold(osk);
+	osk->popup = false;
+	osk->popup_n = 0;
 	osk->pressed = NULL;
 	osk->visible = visible;
 	if (visible) {
@@ -706,6 +842,125 @@ key_at(struct ng_osk *osk, double lx, double ly)
 	return NULL;
 }
 
+/* -- long-press accent popup ------------------------------------------- */
+
+/* base letter this key long-presses to accents, or 0 (EN letters only) */
+static char
+accent_base(struct ng_osk *osk, struct key *k)
+{
+	if (!k || k->kind != KK_CHAR || osk->layer != LY_EN || k->group != 0)
+		return 0;
+	char c = k->lbl[0];
+	if (k->lbl[1] || c < 'a' || c > 'z')
+		return 0;
+	return c;
+}
+
+static void
+osk_cancel_hold(struct ng_osk *osk)
+{
+	if (osk->hold_timer)
+		wl_event_source_timer_update(osk->hold_timer, 0); /* disarm */
+	osk->hold_key = NULL;
+}
+
+static void
+osk_close_popup(struct ng_osk *osk)
+{
+	if (!osk->popup)
+		return;
+	osk->popup = false;
+	osk->popup_n = 0;
+	osk->popup_hot = -1;
+	if (osk->visible)
+		osk_render(osk);
+}
+
+static void
+osk_open_popup(struct ng_osk *osk, struct key *src)
+{
+	char base = accent_base(osk, src);
+	if (!base)
+		return;
+	uint16_t code[10];
+	int n = accent_lookup(base, code, osk->popup_lbl, 10);
+	if (n < 1)
+		return;
+
+	for (int i = 0; i < n; i++)
+		osk->popup_keys[i] = (struct key){osk->popup_lbl[i], KK_CHAR, code[i], ACC_GROUP, false, 1.0f, {0}};
+	osk->popup_n = n;
+
+	/* a row of cells the size of the source key, centred over it, clamped */
+	int cw = src->box.width, ch = src->box.height;
+	int gap = cw / 12;
+	int total = n * cw + (n - 1) * gap;
+	int x = src->box.x + cw / 2 - total / 2;
+	int y = src->box.y - ch - gap;
+	if (x < osk->area.x)
+		x = osk->area.x;
+	if (x + total > osk->area.x + osk->area.width)
+		x = osk->area.x + osk->area.width - total;
+	if (y < osk->area.y) /* no room above -> drop below the key */
+		y = src->box.y + ch + gap;
+	osk->popup_area = (struct wlr_box){x, y, total, ch};
+	for (int i = 0; i < n; i++)
+		osk->popup_keys[i].box = (struct wlr_box){x + i * (cw + gap), y, cw, ch};
+
+	/* pick the cell nearest the finger as the initial selection */
+	osk->popup_hot = 0;
+	for (int i = 0; i < n; i++)
+		if (osk->press_lx >= osk->popup_keys[i].box.x)
+			osk->popup_hot = i;
+
+	osk_key_up(osk); /* stop any repeat on the base key */
+	osk->popup = true;
+	osk_render(osk);
+}
+
+static int
+osk_hold_cb(void *data)
+{
+	struct ng_osk *osk = data;
+	if (osk->visible && osk->hold_key)
+		osk_open_popup(osk, osk->hold_key);
+	osk->hold_key = NULL;
+	return 0;
+}
+
+static int
+popup_cell_at(struct ng_osk *osk, double lx, double ly)
+{
+	for (int i = 0; i < osk->popup_n; i++) {
+		struct wlr_box b = osk->popup_keys[i].box;
+		/* generous vertical band so a sloppy drag still tracks */
+		if (lx >= b.x && lx < b.x + b.width && ly >= b.y - b.height && ly < b.y + 2 * b.height)
+			return i;
+	}
+	return -1;
+}
+
+void
+ng_osk_motion(struct ng_osk *osk, double lx, double ly)
+{
+	if (!osk || !osk->visible)
+		return;
+	if (osk->popup) {
+		int hot = popup_cell_at(osk, lx, ly);
+		if (hot >= 0 && hot != osk->popup_hot) {
+			osk->popup_hot = hot;
+			osk_render(osk);
+		}
+		return;
+	}
+	if (osk->hold_key) {
+		double dx = lx - osk->press_lx, dy = ly - osk->press_ly;
+		int slop = osk->hold_key->box.height / 3 + 6;
+		if (dx * dx + dy * dy > (double) slop * slop)
+			osk_cancel_hold(osk); /* moved off -> not a long-press */
+	}
+}
+
 bool
 ng_osk_press(struct ng_osk *osk, double lx, double ly)
 {
@@ -715,6 +970,18 @@ ng_osk_press(struct ng_osk *osk, double lx, double ly)
 	    ly >= osk->area.y + osk->area.height)
 		return false;
 
+	osk->press_lx = lx;
+	osk->press_ly = ly;
+
+	if (osk->popup) {
+		int hit = popup_cell_at(osk, lx, ly);
+		if (hit >= 0)
+			osk->popup_hot = hit; /* committed on release */
+		else
+			osk_close_popup(osk);
+		return true;
+	}
+
 	struct key *k = key_at(osk, lx, ly);
 	if (!k)
 		return true; /* inside the panel, between keys */
@@ -723,7 +990,17 @@ ng_osk_press(struct ng_osk *osk, double lx, double ly)
 	switch (k->kind) {
 	case KK_CHAR: {
 		bool sh = k->shift || (osk->layer == LY_EN && osk->shift);
-		osk_key_down(osk, k->code, sh, k->group); /* held -> client repeats */
+		if (accent_base(osk, k)) {
+			/* accent-capable: commit on release, arm the long-press timer */
+			osk->hold_key = k;
+			if (!osk->hold_timer && osk->server && osk->server->wl_display)
+				osk->hold_timer = wl_event_loop_add_timer(
+					wl_display_get_event_loop(osk->server->wl_display), osk_hold_cb, osk);
+			if (osk->hold_timer)
+				wl_event_source_timer_update(osk->hold_timer, 330);
+		} else {
+			osk_key_down(osk, k->code, sh, k->group); /* held -> client repeats */
+		}
 		break;
 	}
 	case KK_BKSP:
@@ -781,6 +1058,23 @@ ng_osk_release(struct ng_osk *osk)
 	struct key *k = osk->pressed;
 	osk->pressed = NULL;
 	osk_key_up(osk);
+
+	bool held_accent = (osk->hold_key != NULL);
+	osk_cancel_hold(osk);
+
+	if (osk->popup) {
+		if (osk->popup_hot >= 0 && osk->popup_hot < osk->popup_n) {
+			struct key *pk = &osk->popup_keys[osk->popup_hot];
+			osk_send(osk, pk->code, false, pk->group);
+		}
+		osk_close_popup(osk);
+		return;
+	}
+	if (held_accent && k && k->kind == KK_CHAR) {
+		/* released before the popup opened -> a plain tap of the base letter */
+		bool sh = k->shift || (osk->layer == LY_EN && osk->shift);
+		osk_send(osk, k->code, sh, k->group);
+	}
 
 	if (k && k->kind == KK_CHAR && osk->shift && !osk->caps && osk->layer == LY_EN)
 		osk->shift = false; /* one-shot shift consumed */
