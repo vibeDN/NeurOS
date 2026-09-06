@@ -14,14 +14,18 @@ tmux kill-server 2>/dev/null || true
 export LANG="${LANG:-C.UTF-8}"
 export LC_ALL="${LC_ALL:-C.UTF-8}"
 
-# software GL (llvmpipe) - the dev VM has no real 3D
-export WLR_RENDERER="${WLR_RENDERER:-gles2}"
-export LIBGL_ALWAYS_SOFTWARE=1
+# Renderer: pixman (software, no EGL/GL) is the safe default - all of NeurOS's
+# chrome is pixman-drawn anyway, and forcing software GL (LIBGL_ALWAYS_SOFTWARE)
+# now segfaults on mesa >= 26 when the vGPU advertises a hardware device
+# (virtio-gpu / vmwgfx). The aarch64/sweet target overrides to gles2 (real
+# Adreno) via /etc/neuros/display.conf.
+export WLR_RENDERER="${WLR_RENDERER:-pixman}"
 export GALLIUM_DRIVER="${GALLIUM_DRIVER:-llvmpipe}"
 
-# libseat: builtin backend (we run as root); it embeds seatd in-process, which
-# shows as a second short-lived neuros-comp - expected, not a duplicate compositor
-export LIBSEAT_BACKEND="${LIBSEAT_BACKEND:-builtin}"
+# libseat: let it auto-probe (seatd daemon -> logind -> builtin). The service
+# Wants=seatd.service, so the seatd backend is normally what's used. Forcing
+# 'builtin' fails unless libseat was built with BR2_PACKAGE_SEATD_BUILTIN.
+[ -n "${LIBSEAT_BACKEND:-}" ] && export LIBSEAT_BACKEND
 
 # output geometry, in priority order:
 #   /etc/neuros/display.conf  ->  `neuros.mode=WxH[@R]` kernel arg  ->  DMI
