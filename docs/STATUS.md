@@ -1,68 +1,66 @@
-# NeurOS status - autonomous session (2026-09-04, ~00:50 -> ~05:00 local)
+# NeurOS status - 2026-09-06
 
-## Done: M0 -> M4, all verified in a VirtualBox VM. 53 commits.
+x86_64 dev target. ~70 commits. M0-M4 done and previously VM-verified; M2 shell
+has had a full design + interaction pass since. M5 (aarch64/sweet) not started -
+gated on the bootloader unlock (see the `sweet BL unlock` memory).
 
-| milestone | state | proof |
+## Milestones
+
+| milestone | state | notes |
 |-----------|-------|-------|
-| M0 build chain | done | boots, systemd `running`, 0 failed, ssh :2222 |
-| M1 graphics    | done | mesa3d 26 + llvmpipe, wlroots 0.19, `neuros-comp` (cage fork) |
-| M2 UI shell    | done | 4-zone layout matches the mockup: gradient wallpaper, framed |
-|                |      | panes, FIGlet agent/status text, **fcft strip clock + activity line** |
-| M3 agent       | done (proto) | mock agent in tmux, output->status/activity panes, md filter |
-| M4 audio       | done | **full voice loop**: TTS (piper, buffered) + STT (whisper small |
-|                |      | + Silero VAD + mic listener), whisper ~2x RTF after AVX2 |
+| M0 build chain | done | Bootlin external toolchain, systemd PID 1, ssh |
+| M1 graphics    | done | mesa 26 + llvmpipe, wlroots 0.19, `neuros-comp` (cage fork) |
+| M2 UI shell    | done + polished | see below |
+| M3 agent       | proto | `mock-agent` in tmux -> status/activity panes; real Claude Code still TODO |
+| M4 audio       | done | full voice loop (piper TTS buffered, whisper-small + Silero VAD) |
+| M5 aarch64/sweet | not started | needs the unlock + device bringup |
+| M6 first flash | blocked | unlock window slipped (timer reset to ~287 h) |
 
-**Voice loop verified:** piper synth "what is the capital of France" -> `neuros-stt`
--> whisper transcribes exactly -> `tmux send-keys` -> agent responds -> reply
-spoken as one utterance.
+## Shell / compositor (`package/neuros-comp`)
 
-## The shell now (docs/ui-mockup-v0.jpg for comparison)
+- **4-zone glass layout** - strip (clock/date/battery), agent-name pane, centre
+  client pane, state pane, home indicator. Per-agent 2-stop gradient wallpaper.
+- **Typography pass** - sized for the 1080px phone panel (the compositor is
+  DPI-unaware); FIGlet "Big" font for the agent/state text, JetBrains Mono
+  elsewhere.
+- **Lockscreen** - compositor-drawn overlay: clock view -> 6-digit PIN pad
+  (`/etc/neuros/passcode`, default `000000`), real "Cancel" pill. Input fully
+  contained while locked (keys swallowed, OSK hidden, taps intercepted). Not yet
+  promoted to `ext-session-lock-v1` (the remaining piece; deferred).
+- **Power menu** - long-press Power -> Power off / Restart / Cancel pills.
+- **Camera mode** - full-panel viewfinder over the centre pane with back +
+  shutter; live-frame reload path done (synthetic pulse in the VM, needs
+  `/dev/video0` on the phone).
+- **On-screen keyboard** - see `docs/OSK.md`. 5 layers (EN/RU/?123/#+=/emoji),
+  runtime 4-group xkb keymap, synthetic `wlr_keyboard`, long-press alternates
+  (accents, symbol punctuation, `ё`), globe long-press layout picker, space-bar
+  caret trackpad.
+- **Hardware side keys** (`seat.c`, evdev 116/115/114): Power short = screen
+  toggle / long = power menu; Vol short = TTS volume / long = TTS toggle;
+  Power+VolUp = 2nd workspace terminal.
 
-- **strip**: `HH:MM   Day DD Mon   BAT nn%` - real mono via fcft, updated 20s
-- **top pane**: agent name (FIGlet `banner`) - `neuros-ctl agent <name>`
-- **centre pane**: `foot` attached to the agent's tmux session, borderless
-- **bottom pane**: state word (FIGlet) + "using <tool>" sub-line (fcft)
-- wallpaper: per-agent 2-stop gradient (`neuros-ctl colors #top #bot`)
+## Control socket (`neuros-ctl` -> `$XDG_RUNTIME_DIR/neuros-comp.sock`)
 
-## Compositor control socket (`neuros-ctl` / `$XDG_RUNTIME_DIR/neuros-comp.sock`)
+`agent` · `status` · `activity` · `strip` · `strip_right` · `colors` ·
+`mic` · `camera on|off|toggle` · `lock` / `unlock` / `lock "HH:MM|..."` ·
+`screen on|off|toggle` · `power [hide]` · `kbd tap|press|release|toggle|on|off`
 
-`agent <name>` · `status <Working|Thinking|Waiting|Idle>` · `activity <text>` ·
-`strip <text>` · `colors <#top> <#bot>`
+## Current blockers / TODO
 
-## Packages built this session
-
-```
-neuros-comp/     cage 0.2.1 fork: shell.c (4-zone+gradient), figlet.c (.flf),
-                 textbuf.c (fcft->wlr_buffer), ipc.c (socket), neuros-ctl, -k
-neuros-agentd/    tmux orchestrator + tts-filter + agent-status + neuros-stt +
-                 neuros-listen (mic+VAD) + neuros-mic + neuros-clock + mock-agent
-piper / piper-voices     prebuilt piper + ryan (en) + ruslan (ru)
-whisper-cpp / whisper-model   from source (+AVX2), ggml-small.bin + Silero VAD
-```
-
-Image ~950 MB (466 MB is the whisper model). Compositor runs as
-`neuros-comp.service` on tty1 (`Conflicts=getty@tty1`), libseat builtin backend.
-
-## Needs you (parked - not guessed)
-
-- **M5 (aarch64 / sweet)** - the phone bringup. Device knowledge + bootloader
-  unlock (~2026-09-10). Halium-style per the locked decisions.
+- **Dev host migrated Gentoo -> Debian 13** - `output/` is being rebuilt from
+  scratch (host tree was linked against a newer glibc). See
+  `docs/DEBIAN-MIGRATION.md`. VM verification of the latest OSK work is pending
+  that rebuild.
+- **`wpewebkit`** (`fa3858f`, WIP browser) - fails host `FindRuby`; needs the
+  Debian `ruby` pkg + `PATH` care. Temporarily disabled once to get an image.
 - **Real Claude Code** in the image (Node + auth) - `mock-agent` stands in.
-- **Lockscreen** UX - `ext-session-lock-v1` plumbing is clear; the unlock
-  gesture (PIN? any-key? pattern?) is your call.
-- **Camera pane** + on-screen mic/camera buttons - needs input hit-testing in
-  the compositor and your UX call on button placement/size.
-- Live-mic capture is the one unverified link in the STT path (no mic in the VM).
+- **`ext-session-lock-v1`** - deferred (input is already contained).
+- Live-mic capture, camera `/dev/video0`, erofs ro-root + f2fs data - all still open.
 
-## Smaller polish left (safe to do solo next)
+## Bootloader unlock (sweet)
 
-- erofs read-only root + overlay-/etc + f2fs data (still plain ext4 in dev image).
-- NTP/timezone (VM shows UTC).
-- Right-align the battery in the strip; nudge the activity line up a few px.
-- `GGML` `-march` tuning for the ARM target at M5.
-- Buffer whole STT windows with proper endpointing (currently fixed 5s windows).
-
-## Still open (ROADMAP)
-
-- Exact newest-stable HyperOS build for sweet to harvest blobs from.
-- Claw'd mascot rights (emailed Anthropic, pending).
+Bind confirmed on the RU datacenter; the wait timer got reset + extended to
+~287 h (~2026-09-18) after post-migration re-checks. No free Qualcomm wait-bypass
+exists for `sweet` (EDL needs an authed Firehose loader; no eng ABL published).
+Plan: wait it out, unlock via `miunlock`. Full detail in the `sweet BL unlock`
+memory.
