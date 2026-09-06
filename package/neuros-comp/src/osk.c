@@ -120,6 +120,10 @@ static const struct accent_set SYMALTS[] = {
 	{0, NULL},
 };
 
+/* Russian YCUKEN has no ё key - it hangs off a long-press of е. Parked in
+ * Group4 on the last free digit keycode (slot 41 = AE10). */
+#define RU_YO "ё"
+
 /* accent/symbol codepoint parked at each of the 42 keycodes in xkb Group4 */
 static uint32_t g_acc[42];
 
@@ -140,7 +144,10 @@ build_accents(void)
 {
 	memset(g_acc, 0, sizeof(g_acc));
 	fill_alts(ACCENTS, 0);  /* letter keycodes 0..31 */
-	fill_alts(SYMALTS, 32); /* digit keycodes 32..41 */
+	fill_alts(SYMALTS, 32); /* digit keycodes 32..40 (9 slots) */
+	uint32_t yo;
+	u8dec(RU_YO, &yo);
+	g_acc[41] = yo; /* AE10 - the one digit keycode SYMALTS leaves free */
 }
 
 /* keycode index (build order: AD*12, AC*11, AB*9, AE*10) -> evdev code */
@@ -161,7 +168,11 @@ acc_evdev(int kci)
 static const char *
 key_alts(enum layer layer, struct key *k)
 {
-	if (!k || k->kind != KK_CHAR || k->lbl[1])
+	if (!k || k->kind != KK_CHAR)
+		return NULL;
+	if (layer == LY_RU && k->group == 1 && strcmp(k->lbl, "е") == 0)
+		return RU_YO; /* е -> ё */
+	if (k->lbl[1])
 		return NULL;
 	char c = k->lbl[0];
 	const struct accent_set *tbl = NULL;
