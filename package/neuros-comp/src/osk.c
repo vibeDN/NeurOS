@@ -374,14 +374,17 @@ struct ng_osk {
 	uint8_t held_group;
 	bool held_shift;
 
-	/* long-press accent popup */
+	/* long-press popup: accent chars (a KK_CHAR held) or a layout picker
+	 * (the globe held) */
 	struct wl_event_source *hold_timer;
-	struct key *hold_key;    /* accent-capable KK_CHAR key awaiting the timer */
+	struct key *hold_key;    /* key awaiting the long-press timer, or NULL */
 	double press_lx, press_ly;
 	bool popup;
+	int popup_mode;          /* 0 = accent chars, 1 = layout picker */
 	int popup_n, popup_hot;  /* hot = cell under the finger, -1 = none */
 	struct key popup_keys[10];
 	char popup_lbl[10][8];
+	enum layer popup_layer[10]; /* popup_mode 1: target layer per cell */
 	struct wlr_box popup_area;
 };
 
@@ -876,22 +879,13 @@ osk_close_popup(struct ng_osk *osk)
 		osk_render(osk);
 }
 
+/* lay `n` already-filled popup_keys into a row over `src`, clamp, show */
 static void
-osk_open_popup(struct ng_osk *osk, struct key *src)
+osk_popup_show(struct ng_osk *osk, struct key *src, int n, int mode)
 {
-	char base = accent_base(osk, src);
-	if (!base)
-		return;
-	uint16_t code[10];
-	int n = accent_lookup(base, code, osk->popup_lbl, 10);
-	if (n < 1)
-		return;
-
-	for (int i = 0; i < n; i++)
-		osk->popup_keys[i] = (struct key){osk->popup_lbl[i], KK_CHAR, code[i], ACC_GROUP, false, 1.0f, {0}};
 	osk->popup_n = n;
+	osk->popup_mode = mode;
 
-	/* a row of cells the size of the source key, centred over it, clamped */
 	int cw = src->box.width, ch = src->box.height;
 	int gap = cw / 12;
 	int total = n * cw + (n - 1) * gap;
@@ -913,19 +907,64 @@ osk_open_popup(struct ng_osk *osk, struct key *src)
 		if (osk->press_lx >= osk->popup_keys[i].box.x)
 			osk->popup_hot = i;
 
-	osk_key_up(osk); /* stop any repeat on the base key */
+	osk_key_up(osk); /* stop any repeat on the held key */
 	osk->popup = true;
 	osk_render(osk);
+}
+
+static void
+osk_open_accent_popup(struct ng_osk *osk, struct key *src)
+{
+	char base = accent_base(osk, src);
+	if (!base)
+		return;
+	uint16_t code[10];
+	int n = accent_lookup(base, code, osk->popup_lbl, 10);
+	if (n < 1)
+		return;
+	for (int i = 0; i < n; i++)
+		osk->popup_keys[i] = (struct key){osk->popup_lbl[i], KK_CHAR, code[i], ACC_GROUP, false, 1.0f, {0}};
+	osk_popup_show(osk, src, n, 0);
+}
+
+static void
+osk_open_layout_popup(struct ng_osk *osk, struct key *src)
+{
+	static const char *LBL[4] = {"EN", "RU", "?12", ":)"};
+	static const enum layer LY[4] = {LY_EN, LY_RU, LY_SYM, LY_EMOJI};
+	for (int i = 0; i < 4; i++) {
+		snprintf(osk->popup_lbl[i], sizeof(osk->popup_lbl[i]), "%s", LBL[i]);
+		osk->popup_keys[i] = (struct key){osk->popup_lbl[i], KK_LANG, 0, 0, false, 1.0f, {0}};
+		osk->popup_layer[i] = LY[i];
+	}
+	osk_popup_show(osk, src, 4, 1);
 }
 
 static int
 osk_hold_cb(void *data)
 {
 	struct ng_osk *osk = data;
-	if (osk->visible && osk->hold_key)
-		osk_open_popup(osk, osk->hold_key);
+	struct key *k = osk->hold_key;
 	osk->hold_key = NULL;
+	if (!osk->visible || !k)
+		return 0;
+	if (k->kind == KK_LANG)
+		osk_open_layout_popup(osk, k);
+	else
+		osk_open_accent_popup(osk, k);
 	return 0;
+}
+
+/* arm the long-press timer for a key whose tap acts on release */
+static void
+osk_arm_hold(struct ng_osk *osk, struct key *k)
+{
+	osk->hold_key = k;
+	if (!osk->hold_timer && osk->server && osk->server->wl_display)
+		osk->hold_timer = wl_event_loop_add_timer(wl_display_get_event_loop(osk->server->wl_display),
+							 osk_hold_cb, osk);
+	if (osk->hold_timer)
+		wl_event_source_timer_update(osk->hold_timer, 330);
 }
 
 static int
@@ -990,17 +1029,10 @@ ng_osk_press(struct ng_osk *osk, double lx, double ly)
 	switch (k->kind) {
 	case KK_CHAR: {
 		bool sh = k->shift || (osk->layer == LY_EN && osk->shift);
-		if (accent_base(osk, k)) {
-			/* accent-capable: commit on release, arm the long-press timer */
-			osk->hold_key = k;
-			if (!osk->hold_timer && osk->server && osk->server->wl_display)
-				osk->hold_timer = wl_event_loop_add_timer(
-					wl_display_get_event_loop(osk->server->wl_display), osk_hold_cb, osk);
-			if (osk->hold_timer)
-				wl_event_source_timer_update(osk->hold_timer, 330);
-		} else {
+		if (accent_base(osk, k))
+			osk_arm_hold(osk, k); /* accent-capable: commit on release */
+		else
 			osk_key_down(osk, k->code, sh, k->group); /* held -> client repeats */
-		}
 		break;
 	}
 	case KK_BKSP:
@@ -1036,9 +1068,7 @@ ng_osk_press(struct ng_osk *osk, double lx, double ly)
 		osk->layer = osk->letter;
 		break;
 	case KK_LANG:
-		osk->letter = (osk->letter == LY_EN) ? LY_RU : LY_EN;
-		osk->layer = osk->letter;
-		osk->shift = false;
+		osk_arm_hold(osk, k); /* tap = EN<->RU toggle (on release); hold = picker */
 		break;
 	case KK_EMOJI:
 		osk->layer = LY_EMOJI;
@@ -1059,21 +1089,35 @@ ng_osk_release(struct ng_osk *osk)
 	osk->pressed = NULL;
 	osk_key_up(osk);
 
-	bool held_accent = (osk->hold_key != NULL);
+	bool was_held = (osk->hold_key != NULL);
 	osk_cancel_hold(osk);
 
 	if (osk->popup) {
 		if (osk->popup_hot >= 0 && osk->popup_hot < osk->popup_n) {
-			struct key *pk = &osk->popup_keys[osk->popup_hot];
-			osk_send(osk, pk->code, false, pk->group);
+			if (osk->popup_mode == 1) { /* layout picker */
+				enum layer t = osk->popup_layer[osk->popup_hot];
+				osk->layer = t;
+				if (t == LY_EN || t == LY_RU)
+					osk->letter = t;
+				osk->shift = false;
+			} else { /* accent char */
+				struct key *pk = &osk->popup_keys[osk->popup_hot];
+				osk_send(osk, pk->code, false, pk->group);
+			}
 		}
 		osk_close_popup(osk);
 		return;
 	}
-	if (held_accent && k && k->kind == KK_CHAR) {
-		/* released before the popup opened -> a plain tap of the base letter */
-		bool sh = k->shift || (osk->layer == LY_EN && osk->shift);
-		osk_send(osk, k->code, sh, k->group);
+	if (was_held && k) {
+		/* released before the popup opened -> treat as a normal tap */
+		if (k->kind == KK_CHAR) {
+			bool sh = k->shift || (osk->layer == LY_EN && osk->shift);
+			osk_send(osk, k->code, sh, k->group);
+		} else if (k->kind == KK_LANG) {
+			osk->letter = (osk->letter == LY_EN) ? LY_RU : LY_EN;
+			osk->layer = osk->letter;
+			osk->shift = false;
+		}
 	}
 
 	if (k && k->kind == KK_CHAR && osk->shift && !osk->caps && osk->layer == LY_EN)
