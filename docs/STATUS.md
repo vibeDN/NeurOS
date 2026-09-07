@@ -11,7 +11,7 @@ gated on the bootloader unlock (see the `sweet BL unlock` memory).
 | M0 build chain | done | Bootlin external toolchain, systemd PID 1, ssh |
 | M1 graphics    | done | mesa 26 + llvmpipe, wlroots 0.19, `neuros-comp` (cage fork) |
 | M2 UI shell    | done + polished | see below |
-| M3 agent       | proto+ | real Claude Code 2.1.263 boots in the centre pane (`package/claude-code` ships the host binary); shared memory via MCP (see below); orchestration still the mock-agent shell |
+| M3 agent       | proto+ | real Claude Code 2.1.263 boots in the centre pane (`package/claude-code` ships the host binary); `agent-run` keeps it alive across exits (leave the CLI -> a shell, `exit` -> back); shared memory via MCP (see below); orchestration still the mock-agent shell |
 | M4 audio       | done | full voice loop (piper TTS buffered, whisper-small + Silero VAD) |
 | M5 aarch64/sweet | not started | needs the unlock + device bringup |
 | M6 first flash | blocked | unlock window ~2026-09-18 |
