@@ -13,7 +13,9 @@ NEUROS_MEMORY_MCP_SITE = $(BR2_EXTERNAL_NEUROS_PATH)/package/neuros-memory-mcp/s
 NEUROS_MEMORY_MCP_SITE_METHOD = local
 NEUROS_MEMORY_MCP_LICENSE = MIT
 
-# stdlib only - no module downloads
+# stdlib only - no module downloads. GOMOD must match src/go.mod's module line
+# (buildroot can't infer it from a local SITE path).
+NEUROS_MEMORY_MCP_GOMOD = neuros-memory-mcp
 NEUROS_MEMORY_MCP_BUILD_TARGETS = .
 
 define NEUROS_MEMORY_MCP_INSTALL_INIT_SYSTEMD

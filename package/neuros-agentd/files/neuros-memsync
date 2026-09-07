@@ -1,0 +1,66 @@
+#!/bin/sh
+# Git-sync the shared agent memory directory with a remote repo, around agent
+# sessions - so the NeurOS device, the desktop and claude.ai (via the memory
+# MCP) all converge on one memory with history.
+#
+#   neuros-memsync pull   - before a session
+#   neuros-memsync push   - after a session (wire into the Stop hook / on exit)
+#   neuros-memsync sync   - pull then push  (default)
+#
+# Config: /etc/neuros/memsync.conf
+#   MEM_REMOTE="git@github.com:you/neuros-memory.git"   (required)
+#   MEM_DIR="/home/claude/memory"                       (default)
+#   MEM_BRANCH="main"                                   (default)
+# The device needs an SSH key that can reach MEM_REMOTE (deploy key, write).
+set -u
+
+CONF=/etc/neuros/memsync.conf
+[ -r "$CONF" ] && . "$CONF"
+: "${MEM_DIR:=/home/claude/memory}"
+: "${MEM_REMOTE:=}"
+: "${MEM_BRANCH:=main}"
+
+[ -n "$MEM_REMOTE" ] || { echo "memsync: MEM_REMOTE unset in $CONF - skipping" >&2; exit 0; }
+command -v git >/dev/null 2>&1 || { echo "memsync: git not installed" >&2; exit 0; }
+
+mkdir -p "$MEM_DIR"
+cd "$MEM_DIR" || exit 1
+export GIT_TERMINAL_PROMPT=0 GIT_SSH_COMMAND="ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new"
+
+if [ ! -d .git ]; then
+	git init -q -b "$MEM_BRANCH"
+	git remote add origin "$MEM_REMOTE"
+	if git fetch -q origin "$MEM_BRANCH" 2>/dev/null; then
+		git reset -q --hard "origin/$MEM_BRANCH"
+	fi
+fi
+
+id="-c user.email=neuros@localhost -c user.name=$(hostname 2>/dev/null || echo neuros)"
+
+pull() {
+	git fetch -q origin "$MEM_BRANCH" 2>/dev/null || return 0
+	git rev-parse --verify -q "origin/$MEM_BRANCH" >/dev/null || return 0
+	# keep local edits, prefer union-merge for the append-style memory files
+	git $id stash -q 2>/dev/null && stashed=1 || stashed=0
+	git $id merge -q -X union --no-edit "origin/$MEM_BRANCH" 2>/dev/null \
+		|| git $id reset -q --hard "origin/$MEM_BRANCH"
+	[ "$stashed" = 1 ] && git $id stash pop -q 2>/dev/null
+	return 0
+}
+
+push() {
+	git add -A
+	git diff --cached --quiet && return 0
+	git $id commit -q -m "memory $(date -u +%FT%TZ) ($(hostname 2>/dev/null || echo neuros))"
+	git push -q origin "HEAD:$MEM_BRANCH" 2>/dev/null && return 0
+	# raced - rebase onto the remote and retry once
+	git $id pull -q --rebase -X union origin "$MEM_BRANCH" 2>/dev/null \
+		&& git push -q origin "HEAD:$MEM_BRANCH" 2>/dev/null
+}
+
+case "${1:-sync}" in
+pull) pull ;;
+push) push ;;
+sync) pull; push ;;
+*) echo "usage: neuros-memsync pull|push|sync" >&2; exit 2 ;;
+esac

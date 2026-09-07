@@ -27,6 +27,9 @@ define NEUROS_AGENTD_INSTALL_TARGET_CMDS
 	$(INSTALL) -D -m 0755 $(@D)/neuros-screen $(TARGET_DIR)/usr/bin/neuros-screen
 	$(INSTALL) -D -m 0755 $(@D)/neuros-ws $(TARGET_DIR)/usr/bin/neuros-ws
 	$(INSTALL) -D -m 0755 $(@D)/neuros-key $(TARGET_DIR)/usr/bin/neuros-key
+	$(INSTALL) -D -m 0755 $(@D)/neuros-memsync $(TARGET_DIR)/usr/bin/neuros-memsync
+	test -f $(TARGET_DIR)/etc/neuros/memsync.conf || \
+		$(INSTALL) -D -m 0644 $(@D)/memsync.conf $(TARGET_DIR)/etc/neuros/memsync.conf
 	$(INSTALL) -D -m 0755 $(@D)/neuros-agent-hook $(TARGET_DIR)/usr/lib/neuros/neuros-agent-hook
 	$(INSTALL) -D -m 0644 $(@D)/agentd.conf $(TARGET_DIR)/etc/neuros/agentd.conf
 	test -f $(TARGET_DIR)/etc/neuros/passcode || \
