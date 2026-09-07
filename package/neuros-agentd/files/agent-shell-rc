@@ -1,0 +1,4 @@
+# sourced (via $ENV) by the shell you land in after leaving the agent.
+PS1='neuros:${PWD##*/} $ '
+alias claude='exit'   # muscle-memory: `claude` here just returns to the agent
+printf '\033[2m  shell - "exit" / Ctrl-D / "claude" returns to the agent\033[0m\n'

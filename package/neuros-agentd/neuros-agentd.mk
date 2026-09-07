@@ -11,6 +11,8 @@ NEUROS_AGENTD_LICENSE = MIT
 
 define NEUROS_AGENTD_INSTALL_TARGET_CMDS
 	$(INSTALL) -D -m 0755 $(@D)/neuros-agentd $(TARGET_DIR)/usr/lib/neuros/neuros-agentd
+	$(INSTALL) -D -m 0755 $(@D)/agent-run $(TARGET_DIR)/usr/lib/neuros/agent-run
+	$(INSTALL) -D -m 0644 $(@D)/agent-shell-rc $(TARGET_DIR)/usr/lib/neuros/agent-shell-rc
 	$(INSTALL) -D -m 0755 $(@D)/tts-filter $(TARGET_DIR)/usr/lib/neuros/tts-filter
 	$(INSTALL) -D -m 0755 $(@D)/agent-status $(TARGET_DIR)/usr/lib/neuros/agent-status
 	$(INSTALL) -D -m 0755 $(@D)/mock-agent $(TARGET_DIR)/usr/lib/neuros/mock-agent

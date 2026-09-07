@@ -1,0 +1,51 @@
+#!/bin/sh
+# The agent CLI, wrapped for kiosk use. When you leave the CLI - a double
+# Ctrl-C, /exit, or a crash - you land in a plain shell in the same terminal
+# instead of a dead pane. Type commands there (run `claude` by hand, poke
+# around, `neuros-*` tools...); `exit` or Ctrl-D brings the agent back.
+set -u
+
+CONF=/etc/neuros/agentd.conf
+[ -r "$CONF" ] && . "$CONF"
+: "${AGENT_CMD:=/usr/lib/neuros/mock-agent}"
+: "${AGENT_USER:=}"
+: "${AGENT_WORKDIR:=/root}"
+
+mkdir -p "$AGENT_WORKDIR" 2>/dev/null || true
+export COLORTERM=truecolor   # Claude Code mascot renders orange, not pink
+
+dim() { printf '\033[2m%s\033[0m\n' "$*"; }
+
+run_agent() {
+	# su strips the environment, so COLORTERM has to be re-set inside -c.
+	# AGENT_CMD / AGENT_WORKDIR are bare tokens (see agentd.conf) - no quoting.
+	if [ -n "$AGENT_USER" ] && [ "$(id -u)" = 0 ] && id "$AGENT_USER" >/dev/null 2>&1; then
+		su -s /bin/sh "$AGENT_USER" -c "export COLORTERM=truecolor; cd $AGENT_WORKDIR && exec $AGENT_CMD"
+	else
+		( cd "$AGENT_WORKDIR" && exec $AGENT_CMD )
+	fi
+}
+
+# an interactive shell in the agent's working dir, as the agent user when set.
+# returning from it (exit / Ctrl-D) loops back to the agent. busybox ash resets
+# PS1 on its own for interactive shells, so the prompt is set from an rc file
+# pointed to by $ENV (which ash sources for every interactive shell).
+SHELL_RC=/usr/lib/neuros/agent-shell-rc
+drop_to_shell() {
+	if [ -n "$AGENT_USER" ] && [ "$(id -u)" = 0 ] && id "$AGENT_USER" >/dev/null 2>&1; then
+		su -s /bin/sh "$AGENT_USER" -c "cd '$AGENT_WORKDIR' 2>/dev/null; ENV='$SHELL_RC' exec /bin/sh -i"
+	else
+		( cd "$AGENT_WORKDIR" 2>/dev/null; ENV="$SHELL_RC" exec /bin/sh -i )
+	fi
+}
+
+first=1
+while :; do
+	[ "$first" = 1 ] || dim "  returning to the agent - Ctrl-C twice to leave again"
+	first=0
+	run_agent
+	rc=$?
+	echo
+	dim "  agent exited ($rc).  You're in a shell now - 'exit' (or Ctrl-D) brings Claude back."
+	drop_to_shell
+done

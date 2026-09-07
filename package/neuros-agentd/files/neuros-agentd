@@ -1,7 +1,8 @@
 #!/bin/sh
 # NeurOS agent orchestrator (prototype).
 #
-# - runs the selected agent CLI inside a tmux session ("agent")
+# - runs the selected agent CLI inside a tmux session ("agent"), via agent-run
+#   so leaving the CLI just brings it back (kiosk)
 # - tees the pane output to the TTS filter and a status classifier
 # - drives the compositor panes through neuros-ctl
 #
@@ -30,24 +31,23 @@ mkdir -p "$SHARE" && chmod 1777 "$SHARE"
 
 log() { echo "[agentd] $*" >&2; }
 
-# 1. create the agent session immediately - neuros-session is waiting on it
-if ! tmux has-session -t "$TMUX_SESSION" 2>/dev/null; then
-	# drop privileges to AGENT_USER when set and we're root; else run in place.
-	# (AGENT_WORKDIR / AGENT_CMD are simple tokens - no spaces - so no quoting.)
-	# COLORTERM makes Claude Code emit 24-bit colour (its mascot is orange, not
-	# pink); su strips the env so it has to be set inside the -c string.
-	if [ -n "$AGENT_USER" ] && [ "$(id -u)" = 0 ] && id "$AGENT_USER" >/dev/null 2>&1; then
-		log "starting agent: $AGENT_CMD as $AGENT_USER (cwd $AGENT_WORKDIR)"
-		AGENT_LAUNCH="su -s /bin/sh $AGENT_USER -c 'export COLORTERM=truecolor; cd $AGENT_WORKDIR && exec $AGENT_CMD'"
-	else
-		log "starting agent: $AGENT_CMD (cwd $AGENT_WORKDIR)"
+# create the agent session (if absent) and (re)attach the output pipe. agent-run
+# keeps the CLI alive across exits, so this normally runs exactly once - but if
+# the whole session is killed we recreate it rather than leave a dead terminal.
+start_session() {
+	if ! tmux has-session -t "$TMUX_SESSION" 2>/dev/null; then
+		log "starting agent: $AGENT_CMD (cwd $AGENT_WORKDIR, user ${AGENT_USER:-root})"
 		mkdir -p "$AGENT_WORKDIR"
-		export COLORTERM=truecolor
-		AGENT_LAUNCH="$AGENT_CMD"
+		tmux new-session -d -s "$TMUX_SESSION" -x 220 -y 50 \
+			-c "$AGENT_WORKDIR" /usr/lib/neuros/agent-run
+		tmux set-option -t "$TMUX_SESSION" status off
 	fi
-	tmux new-session -d -s "$TMUX_SESSION" -x 220 -y 50 -c "$AGENT_WORKDIR" "$AGENT_LAUNCH"
-	tmux set-option -t "$TMUX_SESSION" status off
-fi
+	# -O = also flush existing scrollback into the pipe
+	tmux pipe-pane -t "$TMUX_SESSION" -O "cat >> '$RAW'"
+}
+
+# 1. create the agent session immediately - neuros-session is waiting on it
+start_session
 
 # 2. now wait (briefly) for the compositor control socket
 i=0
@@ -59,9 +59,6 @@ done
 neuros-ctl agent "$AGENT_NAME" 2>/dev/null || true
 neuros-ctl status Idle 2>/dev/null || true
 [ -n "${AGENT_MODEL:-}" ] && neuros-ctl model "$AGENT_MODEL" 2>/dev/null || true
-
-# tee the pane; -O = also capture existing scrollback
-tmux pipe-pane -t "$TMUX_SESSION" -O "cat >> '$RAW'"
 
 : "${TTS_VOICE:=/usr/share/piper-voices/default.onnx}"
 [ -r "$TTS_VOICE" ] || TTS_VOICE=""
@@ -95,12 +92,19 @@ tail -n0 -F "$RAW" 2>/dev/null | while IFS= read -r line; do
 	esac
 done &
 WATCH=$!
+trap 'kill "$WATCH" 2>/dev/null' EXIT
 
 # (b) status poller: classify the whole visible pane once a second; speak the
-# reply on the busy -> Idle edge.
+# reply on the busy -> Idle edge. If the session ever vanishes, rebuild it.
 PREV=Idle
 LASTSPEAK=""
-while tmux has-session -t "$TMUX_SESSION" 2>/dev/null; do
+while true; do
+	if ! tmux has-session -t "$TMUX_SESSION" 2>/dev/null; then
+		log "agent session gone - respawning"
+		neuros-ctl status Idle 2>/dev/null || true
+		start_session
+		PREV=Idle
+	fi
 	st=$(tmux capture-pane -t "$TMUX_SESSION" -p 2>/dev/null | /usr/lib/neuros/agent-status)
 	: "${st:=Idle}"
 	if [ "$st" != "$PREV" ]; then
@@ -125,6 +129,3 @@ while tmux has-session -t "$TMUX_SESSION" 2>/dev/null; do
 	fi
 	sleep 1
 done
-kill "$WATCH" 2>/dev/null
-neuros-ctl status Idle 2>/dev/null || true
-log "agent session ended"
