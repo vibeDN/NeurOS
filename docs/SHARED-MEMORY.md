@@ -1,89 +1,87 @@
-# Shared memory: one brain across the phone, the desktop, and claude.ai
+# Shared memory: one brain across every Claude
 
-Claude Code (local, files) and claude.ai / the Claude app (server-side, no API)
-keep separate memory. There is no supported way to sync them. What we *can* do
-is give both a **shared memory they both use via a tool** - the MCP server here.
+Claude Code (local, files) and Claude on claude.ai / the app (server-side, no
+API) keep separate memory - there is no supported way to sync the two. Instead
+we give every Claude **one shared memory they all use via a tool**, hosted on
+an always-on Cloudflare Worker.
 
 ```
-  claude.ai  ──(custom connector, over a tunnel)──┐
-                                                  ├─▶  neuros-memory-mcp  ──▶  memory dir
-  Claude Code (phone / desktop) ──(--mcp-config)──┘        (memory_* tools)      (*.md files)
-                                                                                     │
-                                                        neuros-memsync (git) ────────┘
-                                                        keeps the phone + desktop dirs equal
+  claude.ai  ───(custom connector)──────────────┐
+                                                 ▼
+  Claude Code (desktop) ──(settings.json)──▶  neuros-memory Worker  ◀── KV
+                                                 ▲   (memory_* tools,
+  NeurOS device: claude ──▶ on-device cache ─────┘    browsable UI, [[links]])
+                            (offline read-through /
+                             write-behind to the Worker)
 ```
 
-## Pieces
+## The Worker  (repo: `~/coding/neuros-memory-worker`)
 
-| component | where | what |
-|-----------|-------|------|
-| `neuros-memory-mcp` | phone + desktop | MCP server (streamable HTTP, :8790). Tools: `memory_list` / `memory_search` / `memory_read` / `memory_write` / `memory_delete`. Bearer token at `/etc/neuros/mcp-token` (phone) or `~/.config/neuros/mcp-token` (desktop). |
-| `neuros-memory-tunnel.service` | the canonical host | `cloudflared` quick tunnel exposing :8790. **Blocked behind the dev machine's NL VPN** - so the **phone** (RU mobile) is the canonical host. |
-| `neuros-mcp-url` | phone | prints the tunnel URL + token for the claude.ai connector |
-| `neuros-memsync` | phone + desktop | `git` sync of the memory dir with `MEM_REMOTE` (a private repo), union-merge, around sessions |
+**URL:** `https://neuros-memory.fokus2082.workers.dev`
 
-## Setup
+- `POST /mcp` - MCP streamable HTTP: `memory_list` / `memory_search` /
+  `memory_read` / `memory_write` / `memory_delete`
+- `GET /?k=<token>` - browsable index of every entry
+- `GET /m/<name>?k=<token>` - one entry, `[[name]]` cross-links resolved
+- `GET /raw/<name>?k=<token>` - plain text
 
-### 1. Phone = canonical host
+Storage: Workers KV (`neuros-memory`, keys `mem:<name>`). Auth: the `MEM_TOKEN`
+secret - Bearer header for `/mcp`, `?k=` on the browse pages. Deploy with
+`./deploy.sh` (CF API directly, no wrangler). CF account `3db2a1a0…`,
+subdomain `fokus2082`.
 
-```sh
-systemctl enable --now neuros-memory-mcp.service neuros-memory-tunnel.service
-neuros-mcp-url          # -> URL: https://xxxx.trycloudflare.com/mcp   Token: ....
-```
-(the quick-tunnel URL changes on every restart - re-run `neuros-mcp-url` and
-update the connector, or set up a *named* Cloudflare tunnel for a stable domain.)
+## Wiring the clients
 
-### 2. claude.ai connector
+### claude.ai
+Settings → Connectors → **Add custom connector**
+- URL: `https://neuros-memory.fokus2082.workers.dev/mcp`
+- Authentication: **Bearer token** = the `MEM_TOKEN`
 
-claude.ai → Settings → Connectors → **Add custom connector**
-- URL: the `.../mcp` URL from `neuros-mcp-url`
-- Authentication: **Bearer token**, the token from `neuros-mcp-url`
-
-Then in a chat: it can call `memory_list` / `memory_write` etc. Ask it to
-"check your shared memory" at the start and "save that to shared memory" when
-it learns something durable.
-
-### 3. Desktop Claude Code
-
+### Claude Code on the desktop
 `~/.claude/settings.json`:
 ```json
-{
-  "mcpServers": {
-    "neuros-memory": {
-      "type": "http",
-      "url": "https://xxxx.trycloudflare.com/mcp",
-      "headers": { "Authorization": "Bearer <token from neuros-mcp-url>" }
-    }
+"mcpServers": {
+  "neuros-memory": {
+    "type": "http",
+    "url": "https://neuros-memory.fokus2082.workers.dev/mcp",
+    "headers": { "Authorization": "Bearer <MEM_TOKEN>" }
   }
 }
 ```
-Use the phone's tunnel URL (works through the VPN - it's plain HTTPS out). When
-the phone is offline, point it at the local desktop server
-(`http://127.0.0.1:8790/mcp`, `~/.config/neuros/mcp-token`) and let
-`neuros-memsync` reconcile.
+(already added on this machine)
 
-### 4. Phone Claude Code
+### NeurOS device
+`neuros-memory-mcp.service` runs `neuros-memory-mcp` as a **cache** in front of
+the Worker: `MEMORY_MCP_URL` (in `/etc/neuros/memory.conf`) + the token
+(`/etc/neuros/mcp-token`, baked dev-only by `post-build.sh`). The agent's
+`/home/claude/.mcp.json` points `claude` at `http://127.0.0.1:8790/mcp`.
+Reads pass through and are mirrored to `/home/claude/memory`; writes hit the
+cache and are pushed (queued to `.pending` while offline, flushed on
+reconnect). `neuros-mcp-url` prints the endpoint + token.
 
-The phone's agent already reads/writes `/home/claude/memory/` directly (the
-memory system prompt), so no `--mcp-config` is needed there - it shares the same
-files the MCP server serves.
+## System-prompt nudge
 
-### 5. git sync (optional but recommended)
+The NeurOS memory prompt already covers it. For the desktop, add to
+`~/.claude/CLAUDE.md`:
 
-Create a private `neuros-memory` repo, add a write deploy key on each machine,
-then `/etc/neuros/memsync.conf`:
-```sh
-MEM_REMOTE="git@github.com:you/neuros-memory.git"
-```
-`neuros-memsync sync` before/after sessions (wire `push` into the Claude Code
-Stop hook). Now the phone dir, the desktop dir and the git history all match.
-
-## System prompt nudge
-
-Add to `~/.claude/CLAUDE.md` (desktop) and it's already implied by the NeurOS
-memory prompt (phone):
-
-> You have a shared long-term memory via the `memory_*` tools (also used by
-> Claude on claude.ai). Call `memory_list` at the start of a task. When you
+> Shared long-term memory is available via the `memory_*` tools (also used by
+> Claude on claude.ai). Call `memory_list` at the start of a task; when you
 > learn a durable fact about the user or their projects, `memory_write` it -
-> one fact per file, short frontmatter (`name` / `summary` / `updated`).
+> one fact per entry, short `--- name / summary / updated ---` frontmatter,
+> cross-link with `[[other-name]]`.
+
+## Rotate the token
+
+```sh
+NEW=$(head -c 24 /dev/urandom | base64 | tr -d '/+=')
+curl -XPUT -H "Authorization: Bearer $(cat ~/.config/neuros/cf-token)" \
+  "https://api.cloudflare.com/client/v4/accounts/3db2a1a07df6f273b7cd229d230d56bd/workers/scripts/neuros-memory/secrets" \
+  -d "{\"name\":\"MEM_TOKEN\",\"text\":\"$NEW\",\"type\":\"secret_text\"}"
+# then update: claude.ai connector, ~/.claude/settings.json, /etc/neuros/mcp-token
+```
+
+## `neuros-memsync` (optional, secondary)
+
+`neuros-memsync` still git-syncs `/home/claude/memory` with `MEM_REMOTE` if set
+- a versioned backup of the memory beyond KV. Not required now that the Worker
+is canonical.
