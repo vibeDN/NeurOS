@@ -96,15 +96,22 @@ func obj(props map[string]any, required ...string) map[string]any {
 }
 func str(desc string) map[string]any { return map[string]any{"type": "string", "description": desc} }
 
+const layout = "Memory is organised in three folders, one .md file per entry:\n" +
+	"  you/<x>     - stable facts about the user: name, routine, people, long-term preferences\n" +
+	"  topics/<x>  - recurring interests/habits, one file per subject (food, work, hobbies...)\n" +
+	"  area/<x>    - an ongoing project or situation with a clear end state (a trip, a repair, a goal)"
+
+var folders = []string{"you", "topics", "area"}
+
 var tools = []toolDef{
-	{"memory_list", "List every memory entry with its one-line summary and last-updated date. Call this at the start of a task.",
+	{"memory_list", "List every memory entry, grouped by folder, with its one-line summary and last-updated date. Call this at the start of a task.\n\n" + layout,
 		obj(nil)},
 	{"memory_search", "Case-insensitive substring search across all memory entries; returns the matching entries and lines.",
 		obj(map[string]any{"query": str("text to search for")}, "query")},
 	{"memory_read", "Return the full contents of one memory entry.",
 		obj(map[string]any{"path": str("entry name, e.g. you/name or topics/food")}, "path")},
-	{"memory_write", "Create or overwrite a memory entry (one durable fact per entry). Keep a short '--- name / summary / updated ---' frontmatter then bullet facts. Cross-link with [[other-name]].",
-		obj(map[string]any{"path": str("entry name, e.g. topics/food"), "content": str("full entry text")}, "path", "content")},
+	{"memory_write", "Create or overwrite one memory entry. The path MUST be under you/, topics/ or area/ - you choose which based on the layout below. Add to an existing entry rather than making near-duplicates (memory_read it first). Only write facts that would still matter in a month.\n\n" + layout + "\n\nEach file: a short '--- name / summary / updated ---' frontmatter, then bullet facts. Cross-link with [[you/name]].",
+		obj(map[string]any{"path": str("you/<x> | topics/<x> | area/<x>"), "content": str("full entry text")}, "path", "content")},
 	{"memory_delete", "Delete a memory entry that is no longer true or relevant.",
 		obj(map[string]any{"path": str("entry name")}, "path")},
 }
@@ -314,34 +321,44 @@ func callToolLocal(name string, raw json.RawMessage) (string, error) {
 	case "memory_list":
 		files := mdFiles()
 		if len(files) == 0 {
-			return "(memory is empty)", nil
+			return "(memory is empty - files go under you/, topics/ or area/)", nil
 		}
-		var b strings.Builder
+		grp := map[string][]string{}
 		for _, f := range files {
 			rel, _ := filepath.Rel(root, f)
+			rel = strings.TrimSuffix(filepath.ToSlash(rel), ".md")
 			data, _ := os.ReadFile(f)
 			sum, upd := "", ""
 			if m := fmRe.FindSubmatch(data); m != nil {
 				fm := string(m[1])
-				sum = fmField(fm, "summary")
-				if sum == "" {
+				if sum = fmField(fm, "summary"); sum == "" {
 					sum = fmField(fm, "description")
 				}
-				upd = fmField(fm, "updated")
-				if upd == "" {
+				if upd = fmField(fm, "updated"); upd == "" {
 					upd = fmField(fm, "modified")
 				}
 			}
-			fmt.Fprintf(&b, "%s", rel)
+			row := "  " + rel + ".md"
 			if upd != "" {
-				fmt.Fprintf(&b, "  (updated %s)", upd)
+				row += "  (" + upd + ")"
 			}
 			if sum != "" {
-				fmt.Fprintf(&b, " - %s", sum)
+				row += " - " + sum
 			}
-			b.WriteByte('\n')
+			top := strings.SplitN(rel, "/", 2)[0]
+			grp[top] = append(grp[top], row)
 		}
-		return b.String(), nil
+		var b strings.Builder
+		for _, k := range []string{"you", "topics", "area"} {
+			if len(grp[k]) > 0 {
+				fmt.Fprintf(&b, "%s/\n%s\n", k, strings.Join(grp[k], "\n"))
+				delete(grp, k)
+			}
+		}
+		for k, rows := range grp {
+			fmt.Fprintf(&b, "%s/\n%s\n", k, strings.Join(rows, "\n"))
+		}
+		return strings.TrimRight(b.String(), "\n"), nil
 
 	case "memory_search":
 		if a.Query == "" {
@@ -379,8 +396,15 @@ func callToolLocal(name string, raw json.RawMessage) (string, error) {
 		return string(data), nil
 
 	case "memory_write":
-		if !strings.HasSuffix(a.Path, ".md") {
-			return "", fmt.Errorf("path must end in .md")
+		top := strings.SplitN(strings.TrimPrefix(a.Path, "/"), "/", 2)[0]
+		ok := false
+		for _, f := range folders {
+			if top == f {
+				ok = true
+			}
+		}
+		if !ok {
+			return "", fmt.Errorf("entry must be under you/, topics/ or area/  (e.g. topics/food)")
 		}
 		full, err := safePath(a.Path)
 		if err != nil {
