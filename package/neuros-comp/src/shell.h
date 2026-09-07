@@ -122,6 +122,9 @@ struct ng_shell {
 	int panel_rad; /* glass panel corner radius - view.c insets the client by it */
 };
 
+/* fire-and-forget `/bin/sh -c cmd` (double-forked). */
+void ng_spawn(const char *cmd);
+
 struct ng_shell *ng_shell_create(struct cg_server *server);
 void ng_shell_destroy(struct ng_shell *shell);
 

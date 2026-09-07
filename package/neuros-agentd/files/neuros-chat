@@ -1,0 +1,10 @@
+#!/bin/sh
+# NeurOS "chat" mode: the same Claude Code binary (so the same OAuth login and
+# the same TTS Stop hook), but with a plain conversational system prompt and no
+# tools - a talking assistant, not a coding agent. `neuros-mode` picks this vs
+# `claude` for the tmux pane.
+exec claude \
+	--system-prompt-file /usr/share/neuros/chat-prompt.txt \
+	--tools "" \
+	--permission-mode dontAsk \
+	"$@"

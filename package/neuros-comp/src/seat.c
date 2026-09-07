@@ -394,10 +394,16 @@ handle_hw_key(struct cg_seat *seat, struct wlr_keyboard_key_event *event)
 	if (event->state == WL_KEYBOARD_KEY_STATE_PRESSED) {
 		seat->hwkey_down_ms[i] = event->time_msec;
 		seat->hwkey_held[i] = true;
-		/* combo: power + vol-up held together -> switch workspace */
-		if (seat->hwkey_held[0] && seat->hwkey_held[2] && !seat->hwkey_combo) {
-			seat->hwkey_combo = true;
-			hw_spawn("neuros-ws toggle");
+		/* combos held with Power: + VolUp = switch workspace, + VolDown =
+		 * toggle chat/code mode */
+		if (seat->hwkey_held[0] && !seat->hwkey_combo) {
+			if (seat->hwkey_held[2]) {
+				seat->hwkey_combo = true;
+				hw_spawn("neuros-ws toggle");
+			} else if (seat->hwkey_held[1]) {
+				seat->hwkey_combo = true;
+				hw_spawn("neuros-mode toggle");
+			}
 		}
 		return true;
 	}
@@ -406,7 +412,7 @@ handle_hw_key(struct cg_seat *seat, struct wlr_keyboard_key_event *event)
 	seat->hwkey_held[i] = false;
 	uint32_t dur = event->time_msec - seat->hwkey_down_ms[i];
 	bool was_combo = seat->hwkey_combo;
-	if (!seat->hwkey_held[0] && !seat->hwkey_held[2])
+	if (!seat->hwkey_held[0] && !seat->hwkey_held[1] && !seat->hwkey_held[2])
 		seat->hwkey_combo = false;
 	if (was_combo)
 		return true; /* combo consumed the hold */
