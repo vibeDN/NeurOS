@@ -1,8 +1,9 @@
 # neuros — project brief (context carry-over)
 
 AI-agent operating system for repurposed Android phones. First target device:
-Redmi Note 10 Pro 4G, codename **sweet**, Snapdragon 732G (SM6150), currently
-mid bootloader-unlock wait.
+Redmi Note 12 Pro 4G (2209116AG, a rebadged Redmi Note 10 Pro), codename
+**sweet**, Snapdragon 732G (Qualcomm SM7150-AC; BSP repos are `sm6150`-family),
+currently mid bootloader-unlock wait (window ~2026-09-18).
 
 ## Backend
 Each of the 6 selectable agents (Claude, ChatGPT, Gemini, Kimi, DeepSeek, Qwen)

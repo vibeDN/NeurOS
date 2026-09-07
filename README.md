@@ -5,7 +5,8 @@ A from-scratch Linux distro that turns a phone into a standalone AI-agent device
 autonomous camera, per-agent memory, retro block-font UI on a Wayland compositor.
 
 First dev target is **x86_64 in a VM**; the hardware target is the
-**Redmi Note 10 Pro 4G "sweet"** (SM6150 / Adreno 618), pending bootloader unlock.
+**Redmi Note 12 Pro 4G "sweet"** (2209116AG, a rebadged Redmi Note 10 Pro -
+Snapdragon 732G / SM7150-AC, Adreno 618), pending bootloader unlock.
 
 See [`docs/ROADMAP.md`](docs/ROADMAP.md) for architecture decisions and milestones,
 and [`MEMORY.md`](MEMORY.md) for the full design brief.
