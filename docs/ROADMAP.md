@@ -466,6 +466,32 @@ Vosk (Kaldi, streaming, per language): small ru/en ~40-50 MB disk, 250-500 MB
 RAM, very light CPU (used here only as VAD). Large models not on device.
 Piper TTS: ~20-65 MB/voice, ~50-150 MB RAM, faster than realtime.
 
+## Resolved (2026-09-07, batch 13) - modes + phone-driving + first QEMU boot
+
+- **First full QEMU boot on Debian** (`scripts/qemu-phone.sh`): image builds,
+  boots 1080x2400, **Claude Code 2.1.263 runs in the centre pane**. Fixes:
+  `claude-code` pkg auto-picks the newest host binary; `neuros-session` ->
+  pixman renderer + auto-probe libseat (gles2+software-GL SEGVs on mesa 26,
+  `builtin` libseat backend isn't built). Verified: OSK long-press (accents /
+  globe picker / symbol alts), settings overlay, all render under pixman.
+- **wpewebkit** OOM-kills a 16 GB box mid-build - disabled in `.config` for now
+  (`docs/DEBIAN-MIGRATION.md`).
+- **Terminal room**: while the OSK is up, drop the state pane and run the centre
+  pane down to the keyboard (top pane / origin stay put so foot never reflows
+  up). foot 17 -> 20.
+- **OSK/phone driving for Claude Code**: `Tab` key (bottom row); the space
+  trackpad now does vertical too (Up/Down arrows); **double-tap Power = Esc**
+  (single tap deferred ~320 ms); `neuros-key` = `tmux send-keys -t agent`.
+- **chat / code modes** (`neuros-mode chat|code|toggle`, Power+VolDown combo,
+  `neuros-ctl mode`): `code` = `claude`; `chat` = `neuros-chat` (same binary,
+  `--system-prompt-file` persona + `--tools "" --setting-sources ""`, isolated
+  session id). `respawn-pane -k` swaps in place. `CHAT_SYNC=cloud` -> `claude
+  --cloud` for cross-device sync. A native claude.ai-web TUI was investigated
+  and declined: Claude Desktop cryptographically gates CDP (Ed25519), and a
+  direct `api.claude.ai` client is against ToS - not baked into the OS.
+- Still TODO: Ctrl key, real terminal touch-scroll, capture the `--cloud`
+  session URL from agentd, a bespoke chat TUI look.
+
 ## Resolved (2026-09-06, batch 11) - OSK long-press
 
 - **Long-press accent chars.** Hold a/e/i/o/u/y/n/c/s/z on the EN layer ->
