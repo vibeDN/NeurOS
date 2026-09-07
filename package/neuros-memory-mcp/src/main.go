@@ -1,10 +1,13 @@
-// neuros-memory-mcp - a tiny MCP server (streamable HTTP) exposing NeurOS's
-// agent memory directory as read/write tools, so both Claude Code on the device
-// and Claude on claude.ai (via a custom connector over a tunnel) work off the
-// same memory. Stdlib only.
+// neuros-memory-mcp - a tiny MCP server (streamable HTTP) for the shared agent
+// memory. On the NeurOS device it runs as an *offline cache* in front of the
+// canonical neuros-memory Cloudflare Worker (set NEUROS_MCP_UPSTREAM): reads go
+// through and are mirrored to a local dir; writes hit the local dir immediately
+// and are pushed to the Worker (queued while offline, flushed on reconnect).
+// With no upstream it is just a local memory-dir server. Stdlib only.
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -15,14 +18,19 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 )
 
 var (
-	root    = envOr("NEUROS_MEMORY_DIR", "/home/claude/memory")
-	addr    = envOr("NEUROS_MCP_ADDR", "127.0.0.1:8790")
-	token   = loadToken()
-	version = "0.1.0"
+	root     = envOr("NEUROS_MEMORY_DIR", "/home/claude/memory")
+	addr     = envOr("NEUROS_MCP_ADDR", "127.0.0.1:8790")
+	token    = loadToken()
+	upstream = strings.TrimRight(os.Getenv("NEUROS_MCP_UPSTREAM"), "/") // e.g. https://x.workers.dev/mcp
+	upTok    = strings.TrimSpace(os.Getenv("NEUROS_MCP_UPSTREAM_TOKEN"))
+	version  = "0.2.0"
+	pending  = filepath.Join(envOr("NEUROS_MEMORY_DIR", "/home/claude/memory"), ".pending")
+	pmu      sync.Mutex
 )
 
 func envOr(k, d string) string {
@@ -89,16 +97,16 @@ func obj(props map[string]any, required ...string) map[string]any {
 func str(desc string) map[string]any { return map[string]any{"type": "string", "description": desc} }
 
 var tools = []toolDef{
-	{"memory_list", "List every memory file with its one-line summary and last-updated date. Call this at the start of a task.",
+	{"memory_list", "List every memory entry with its one-line summary and last-updated date. Call this at the start of a task.",
 		obj(nil)},
-	{"memory_search", "Case-insensitive substring search across all memory files. Returns the matching files with the matching lines.",
+	{"memory_search", "Case-insensitive substring search across all memory entries; returns the matching entries and lines.",
 		obj(map[string]any{"query": str("text to search for")}, "query")},
-	{"memory_read", "Return the full contents of one memory file.",
-		obj(map[string]any{"path": str("path relative to the memory root, e.g. you/name.md")}, "path")},
-	{"memory_write", "Create or overwrite a memory file (one durable fact per file). Keep a short '--- name / summary / updated ---' frontmatter then bullet facts. Path is relative to the memory root and must end in .md; group with a subdir if you like (you/, topics/, area/).",
-		obj(map[string]any{"path": str("relative path, e.g. topics/food.md"), "content": str("full file contents")}, "path", "content")},
-	{"memory_delete", "Delete a memory file that is no longer true or relevant.",
-		obj(map[string]any{"path": str("relative path")}, "path")},
+	{"memory_read", "Return the full contents of one memory entry.",
+		obj(map[string]any{"path": str("entry name, e.g. you/name or topics/food")}, "path")},
+	{"memory_write", "Create or overwrite a memory entry (one durable fact per entry). Keep a short '--- name / summary / updated ---' frontmatter then bullet facts. Cross-link with [[other-name]].",
+		obj(map[string]any{"path": str("entry name, e.g. topics/food"), "content": str("full entry text")}, "path", "content")},
+	{"memory_delete", "Delete a memory entry that is no longer true or relevant.",
+		obj(map[string]any{"path": str("entry name")}, "path")},
 }
 
 func handleRPC(req rpcReq) (rpcResp, bool) {
@@ -178,11 +186,129 @@ func fmField(body, key string) string {
 	return ""
 }
 
+// --- upstream (canonical Worker) proxy + offline queue ------------------
+
+func upCall(name string, raw json.RawMessage) (string, error) {
+	body, _ := json.Marshal(map[string]any{
+		"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+		"params": map[string]any{"name": name, "arguments": json.RawMessage(raw)},
+	})
+	req, _ := http.NewRequest("POST", upstream, bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	if upTok != "" {
+		req.Header.Set("Authorization", "Bearer "+upTok)
+	}
+	resp, err := (&http.Client{Timeout: 8 * time.Second}).Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode/100 != 2 {
+		return "", fmt.Errorf("upstream %d", resp.StatusCode)
+	}
+	var rr struct {
+		Result struct {
+			Content []struct{ Text string }
+			IsError bool
+		}
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&rr); err != nil || len(rr.Result.Content) == 0 {
+		return "", fmt.Errorf("bad upstream reply")
+	}
+	if rr.Result.IsError {
+		return "", fmt.Errorf("%s", rr.Result.Content[0].Text)
+	}
+	return rr.Result.Content[0].Text, nil
+}
+
+func queue(name string, raw json.RawMessage) {
+	pmu.Lock()
+	defer pmu.Unlock()
+	f, err := os.OpenFile(pending, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+	line, _ := json.Marshal(map[string]any{"name": name, "args": json.RawMessage(raw)})
+	f.Write(append(line, '\n'))
+}
+
+func flush() {
+	pmu.Lock()
+	data, err := os.ReadFile(pending)
+	if err != nil || len(data) == 0 {
+		pmu.Unlock()
+		return
+	}
+	os.Remove(pending)
+	pmu.Unlock()
+	for _, ln := range strings.Split(strings.TrimSpace(string(data)), "\n") {
+		var q struct {
+			Name string
+			Args json.RawMessage
+		}
+		if json.Unmarshal([]byte(ln), &q) != nil {
+			continue
+		}
+		if _, err := upCall(q.Name, q.Args); err != nil {
+			queue(q.Name, q.Args) // still offline - requeue
+		}
+	}
+}
+
+// mirror a path/content pair straight into the local dir (cache fill)
+func mirror(path, content string) {
+	if !strings.HasSuffix(path, ".md") {
+		path += ".md"
+	}
+	full, err := safePath(path)
+	if err != nil {
+		return
+	}
+	os.MkdirAll(filepath.Dir(full), 0o755)
+	os.WriteFile(full, []byte(content), 0o644)
+}
+
 func callTool(name string, raw json.RawMessage) (string, error) {
+	if upstream == "" {
+		return callToolLocal(name, raw)
+	}
+	switch name {
+	case "memory_list", "memory_search":
+		if t, err := upCall(name, raw); err == nil {
+			return t, nil
+		}
+		return callToolLocal(name, raw) // offline
+	case "memory_read":
+		if t, err := upCall(name, raw); err == nil {
+			var a struct{ Path string }
+			_ = json.Unmarshal(raw, &a)
+			mirror(a.Path, t)
+			return t, nil
+		}
+		return callToolLocal(name, raw)
+	case "memory_write", "memory_delete":
+		lt, lerr := callToolLocal(name, raw) // local first, always
+		if _, err := upCall(name, raw); err != nil {
+			queue(name, raw)
+			if lerr == nil {
+				return lt + " (queued for sync)", nil
+			}
+		}
+		return lt, lerr
+	}
+	return callToolLocal(name, raw)
+}
+
+func callToolLocal(name string, raw json.RawMessage) (string, error) {
 	var a struct {
 		Path, Content, Query string
 	}
 	_ = json.Unmarshal(raw, &a)
+	// canonical entry names have no .md (matches the Worker); files on disk do
+	if a.Path != "" && !strings.HasSuffix(a.Path, ".md") {
+		a.Path += ".md"
+	}
 
 	switch name {
 	case "memory_list":
@@ -269,7 +395,7 @@ func callTool(name string, raw json.RawMessage) (string, error) {
 		if err := os.WriteFile(full, []byte(a.Content), 0o644); err != nil {
 			return "", err
 		}
-		return "wrote " + a.Path, nil
+		return "wrote " + strings.TrimSuffix(a.Path, ".md"), nil
 
 	case "memory_delete":
 		full, err := safePath(a.Path)
@@ -279,7 +405,7 @@ func callTool(name string, raw json.RawMessage) (string, error) {
 		if err := os.Remove(full); err != nil {
 			return "", fmt.Errorf("not found: %s", a.Path)
 		}
-		return "deleted " + a.Path, nil
+		return "deleted " + strings.TrimSuffix(a.Path, ".md"), nil
 	}
 	return "", fmt.Errorf("unknown tool: %s", name)
 }
@@ -349,6 +475,16 @@ func main() {
 	mux.HandleFunc("/mcp", mcpHandler)
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) { fmt.Fprintln(w, "ok") })
 	srv := &http.Server{Addr: addr, Handler: mux, ReadHeaderTimeout: 5 * time.Second}
-	log.Printf("neuros-memory-mcp %s: %s/mcp  (memory: %s, auth: %v)", version, addr, root, token != "")
+	if upstream != "" {
+		log.Printf("neuros-memory-mcp %s: %s/mcp  (cache for %s)", version, addr, upstream)
+		go func() {
+			for {
+				flush()
+				time.Sleep(30 * time.Second)
+			}
+		}()
+	} else {
+		log.Printf("neuros-memory-mcp %s: %s/mcp  (memory: %s, auth: %v)", version, addr, root, token != "")
+	}
 	log.Fatal(srv.ListenAndServe())
 }

@@ -1,0 +1,12 @@
+#!/bin/sh
+# NeurOS on-device shared-memory MCP: a local cache in front of the canonical
+# neuros-memory Worker. Binds loopback only, so no local auth; the upstream
+# (Worker) token is /etc/neuros/mcp-token.
+[ -r /etc/neuros/memory.conf ] && . /etc/neuros/memory.conf
+export NEUROS_MEMORY_DIR="${NEUROS_MEMORY_DIR:-/home/claude/memory}"
+export NEUROS_MCP_ADDR="${NEUROS_MCP_ADDR:-127.0.0.1:8790}"
+export NEUROS_MCP_TOKEN=""                       # loopback only, no local auth
+export NEUROS_MCP_TOKEN_FILE=/dev/null
+export NEUROS_MCP_UPSTREAM="${MEMORY_MCP_URL:-}"
+export NEUROS_MCP_UPSTREAM_TOKEN="$(cat /etc/neuros/mcp-token 2>/dev/null)"
+exec /usr/bin/neuros-memory-mcp

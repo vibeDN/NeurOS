@@ -78,12 +78,17 @@ if [ -x "$TARGET_DIR/opt/claude-code/claude" ] && [ -f "$HOME/.claude/.credentia
 	{
 	  "permissions": { "defaultMode": "bypassPermissions" },
 	  "includeCoAuthoredBy": false,
+	  "enableAllProjectMcpServers": true,
 	  "hooks": {
 	    "Stop": [
 	      { "hooks": [ { "type": "command", "command": "/usr/lib/neuros/neuros-agent-hook" } ] }
 	    ]
 	  }
 	}
+	EOF
+	# shared-memory MCP (the on-device cache in front of the neuros-memory Worker)
+	cat > "$AGENT_HOME/.mcp.json" <<-'EOF'
+	{ "mcpServers": { "neuros-memory": { "type": "http", "url": "http://127.0.0.1:8790/mcp" } } }
 	EOF
 	# root (for manual `claude` over ssh): bypass is refused as root -> acceptEdits
 	cat > "$TARGET_DIR/root/.claude/settings.json" <<-'EOF'
@@ -93,4 +98,11 @@ if [ -x "$TARGET_DIR/opt/claude-code/claude" ] && [ -f "$HOME/.claude/.credentia
 	}
 	EOF
 	chmod 0600 "$AGENT_HOME/.claude/settings.json" "$TARGET_DIR/root/.claude/settings.json"
+fi
+
+# Shared-memory Worker token (DEV ONLY): bake the build host's token so the
+# on-device memory cache can push to the canonical neuros-memory Worker.
+# Secret - never committed; skip cleanly if absent.
+if [ -f "$HOME/.config/neuros/mcp-token" ]; then
+	install -D -m 0600 "$HOME/.config/neuros/mcp-token" "$TARGET_DIR/etc/neuros/mcp-token"
 fi
