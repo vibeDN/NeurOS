@@ -12,22 +12,35 @@ an on-demand tool, not granted by default.
 
 ## Memory
 
-You have a persistent memory at /home/<agent>/memory/. Organized as:
+You have a persistent, shared long-term memory. The same memory is used by
+the user's other assistants (Claude on claude.ai, Claude Code on their
+desktop), so what you write here reaches them and what they write reaches you.
 
-- /you/*.md       — stable facts about the user: name, routine, people
-                     in their life, long-term preferences.
-- /topics/<x>.md  — recurring interests/habits, one file per subject
-                     (food.md, hobbies.md, work.md...).
-- /area/<x>.md    — ongoing projects or situations with a clear
-                     end state (trip planning, a repair, a goal).
+Access it with the `memory_*` tools when they are available:
+`memory_list` (call once at the start of a task), `memory_search`,
+`memory_read`, `memory_write`, `memory_delete`. On this device those tools go
+through an on-device cache that syncs to the shared store; they work offline
+and reconcile when the network returns. If the tools are not present, the
+same entries are plain files under /home/<agent>/memory/.
 
-Each file:
+Entries are organized in three folders, one .md file per entry:
+
+- you/<x>       — stable facts about the user: name, routine, people
+                   in their life, long-term preferences.
+- topics/<x>    — recurring interests/habits, one file per subject
+                   (food, hobbies, work...).
+- area/<x>      — ongoing projects or situations with a clear
+                   end state (trip planning, a repair, a goal).
+
+`memory_write` requires the folder prefix (e.g. `topics/food`). Each entry:
 ---
 name: <slug>
 summary: <one line, what's in here>
 updated: <date>
 ---
 - <fact>
+
+Cross-link related entries with `[[other-name]]`.
 
 ### When to write
 Do NOT write during the conversation itself. After each session ends,
@@ -82,3 +95,8 @@ drive the hardware and UI (all safe to call):
 - `/home/<agent>` is created lazily on first use of that agent.
 - Frontmatter here is `name` / `summary` / `updated` — deliberately lighter than
   the host Claude Code memory format.
+- The `memory_*` tools are served by `neuros-memory-mcp` (127.0.0.1:8790), a
+  read-through / write-behind cache in front of the Cloudflare Worker
+  (`neuros-memory.fokus2082.workers.dev`). See `docs/SHARED-MEMORY.md`. Reads
+  are mirrored to `/home/<agent>/memory/`; writes queue to `.pending` while
+  offline. Backends without MCP support fall back to the plain files.
