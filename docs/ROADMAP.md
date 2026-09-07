@@ -13,10 +13,14 @@
   (Re-confirmable at M5; the x86_64 dev target is unaffected by this.)
 - **Dev target now:** x86_64, in **QEMU** (primary, fast headless iteration) and
   **VirtualBox** (for eyeballing). **aarch64/sweet target runs in parallel from M3.**
-- **Hardware:** Redmi Note 10 Pro 4G "sweet" (SM6150, Adreno 618), 8 GB RAM
-  variant + 4 GB zram -> ~12 GB budget. Bootloader unlock window ~2026-09-10
-  (see the sweet-BL-unlock memory). Userspace bits are testable *now* on the
-  still-locked phone via an aarch64 chroot under Termux.
+- **Hardware:** Redmi Note 12 Pro 4G "sweet" (model `2209116AG`, a rebadged
+  Redmi Note 10 Pro). SoC is the Snapdragon 732G (Qualcomm SM7150-AC), Adreno
+  618 - but Qualcomm/LineageOS put it in the **SM6150 platform family**, so the
+  BSP repos are `sm6150`-named (see kernel decision below). 8 GB RAM variant +
+  4 GB zram -> ~12 GB budget. Bootloader unlock window ~2026-09-18 (timer was
+  reset + penalised after the Debian migration re-checks; see the sweet-BL-unlock
+  memory). Userspace bits are testable *now* on the still-locked phone via an
+  aarch64 chroot under Termux.
 - **UI:** a fork of **cage** (wlroots kiosk compositor, C) - one app fullscreen,
   exactly NeurOS's model - plus a lockscreen (`ext-session-lock-v1` + a minimal
   `neuros-lock` client). GLES2 throughout: shader-lerp gradient background +
@@ -248,7 +252,7 @@ minimal Android property/HAL container (for camera). Packaged in this BR2_EXTERN
 - [ ] **M5 - aarch64 / sweet target**: `neuros_sweet_defconfig`; downstream
   kernel package; `libhybris` + `android-headers` packages; firmware manifest;
   own-GPT + A/B layout; our AVB key; swupdate.
-- [ ] **M6 - first flash** (after unlock ~2026-09-10): bring-up order
+- [ ] **M6 - first flash** (after unlock ~2026-09-18): bring-up order
   display -> touch -> **wifi (`qcacld-3.0`)** -> GPU (hybris) -> audio -> sensors
   -> **modem + cellular data (`rmtfs`/`qrtr` + ofono, `rmnet_data0`)** -> BT.
 - [ ] **M7**: camera pane + `camera.*` agent tool (hybris HAL) + autonomy;
