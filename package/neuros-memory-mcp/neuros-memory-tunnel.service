@@ -1,0 +1,13 @@
+[Unit]
+Description=NeurOS memory MCP - Cloudflare quick tunnel
+Requires=neuros-memory-mcp.service
+After=neuros-memory-mcp.service network-online.target
+Wants=network-online.target
+
+[Service]
+ExecStart=/usr/bin/cloudflared tunnel --no-autoupdate --url http://127.0.0.1:8790 --metrics 127.0.0.1:0
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

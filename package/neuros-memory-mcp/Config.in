@@ -1,0 +1,15 @@
+config BR2_PACKAGE_NEUROS_MEMORY_MCP
+	bool "neuros-memory-mcp (shared agent memory over MCP)"
+	depends on BR2_PACKAGE_HOST_GO_TARGET_ARCH_SUPPORTS
+	depends on BR2_PACKAGE_HOST_GO_TARGET_CGO_LINKING_SUPPORTS
+	select BR2_PACKAGE_CLOUDFLARED
+	help
+	  A minimal MCP server (streamable HTTP) that exposes the NeurOS
+	  agent memory directory as memory_list / memory_read / memory_search
+	  / memory_write / memory_delete tools. Claude Code on the device and
+	  Claude on claude.ai (added as a custom connector over a Cloudflare
+	  quick tunnel) then read and write the same memory.
+
+comment "neuros-memory-mcp needs a Go-capable toolchain"
+	depends on !BR2_PACKAGE_HOST_GO_TARGET_ARCH_SUPPORTS || \
+		!BR2_PACKAGE_HOST_GO_TARGET_CGO_LINKING_SUPPORTS

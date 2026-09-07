@@ -1,0 +1,19 @@
+[Unit]
+Description=NeurOS shared memory MCP server
+After=network.target
+
+[Service]
+Environment=NEUROS_MEMORY_DIR=/home/claude/memory
+Environment=NEUROS_MCP_ADDR=127.0.0.1:8790
+Environment=NEUROS_MCP_TOKEN_FILE=/etc/neuros/mcp-token
+ExecStartPre=/bin/sh -c 'test -s /etc/neuros/mcp-token || (mkdir -p /etc/neuros && head -c 24 /dev/urandom | base64 | tr -d "/+=" > /etc/neuros/mcp-token && chmod 600 /etc/neuros/mcp-token)'
+ExecStart=/usr/bin/neuros-memory-mcp
+Restart=always
+RestartSec=3
+# it only needs to read/write the memory dir
+ReadWritePaths=/home/claude/memory /etc/neuros
+ProtectSystem=strict
+NoNewPrivileges=yes
+
+[Install]
+WantedBy=multi-user.target

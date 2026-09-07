@@ -1,0 +1,8 @@
+#!/bin/sh
+# Print the current public URL of the shared-memory MCP tunnel + the auth token,
+# ready to paste into claude.ai -> Settings -> Connectors -> Add custom connector.
+u=$(journalctl -u neuros-memory-tunnel --no-pager -o cat 2>/dev/null \
+	| grep -oE 'https://[a-z0-9-]+\.trycloudflare\.com' | tail -n1)
+[ -n "$u" ] || { echo "tunnel not up yet (systemctl status neuros-memory-tunnel)"; exit 1; }
+echo "URL:   $u/mcp"
+echo "Token: $(cat /etc/neuros/mcp-token 2>/dev/null)"

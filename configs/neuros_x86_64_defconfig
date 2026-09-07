@@ -88,6 +88,7 @@ BR2_PACKAGE_DEJAVU_SANS_MONO=y
 BR2_PACKAGE_TMUX=y
 BR2_PACKAGE_JQ=y
 BR2_PACKAGE_NEUROS_AGENTD=y
+BR2_PACKAGE_NEUROS_MEMORY_MCP=y
 # interactive login shell (serial console + ssh); system scripts stay on /bin/sh
 BR2_PACKAGE_FISH=y
 # v1 agent: Anthropic's Claude Code native CLI (baked from the build host)
