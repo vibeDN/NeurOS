@@ -11,7 +11,7 @@ the focused client (`foot` / the agent CLI) just sees ordinary keystrokes.
 
 | layer      | rows | contents                                            |
 |------------|------|-----------------------------------------------------|
-| `LY_EN`    | 4    | QWERTY, shift, `?123`, globe, emoji, space, `,` `.`, enter, hide |
+| `LY_EN`    | 4    | QWERTY, shift, `?123`, globe, `ctl`, `tab`, space, `,` `.`, enter, hide |
 | `LY_RU`    | 4    | ЙЦУКЕН (12/11/9 letter keys - needs the `[ ] ; ' , .` keycodes) |
 | `LY_SYM`   | 4    | `?123` - digits row + common punctuation, `#+=` toggle |
 | `LY_SYM2`  | 4    | `#+=` - brackets, math/currency (`€ £ ¥ § ° · × ÷ • …`) |
@@ -19,7 +19,17 @@ the focused client (`foot` / the agent CLI) just sees ordinary keystrokes.
 
 `osk->letter` remembers the last alphabetic layer (`LY_EN` / `LY_RU`) so `ABC`
 and the globe return to the right one. The globe key: **tap** toggles EN↔RU,
-**long-press** opens a layout picker (see below).
+**long-press** opens a layout picker (see below) - that picker is the only way
+to the emoji layer from the letter rows, so the letter rows carry no dedicated
+emoji key; they spend that slot on `ctl` instead.
+
+`ctl` (`KK_CTRL`, `LY_EN` / `LY_RU` only): one-shot Ctrl. Tap it (label goes
+`CTL`, key highlights), then the next character key is injected as a Ctrl-chord
+via `osk_send_mod(code, MOD_CTRL)` - no accents, no repeat - and the modifier
+clears. Tapping `ctl` again, or hitting any non-character key, disarms it. This
+is what makes `Ctrl-C` / `Ctrl-R` / `Ctrl-U` reachable in the Claude Code TUI.
+`tab` still sends Tab (shift+tab = the mode cycle); Esc is the double-tap of the
+hardware power key, handled in `seat.c`.
 
 ## xkb keymap - the 4-group trick
 

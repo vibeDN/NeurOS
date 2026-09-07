@@ -33,7 +33,8 @@
 
 enum layer { LY_EN, LY_RU, LY_SYM, LY_SYM2, LY_EMOJI };
 enum kk {
-	KK_CHAR, KK_SHIFT, KK_SYM, KK_SYM2, KK_LANG, KK_EMOJI, KK_ABC, KK_BKSP, KK_ENTER, KK_SPACE, KK_HIDE, KK_TAB
+	KK_CHAR, KK_SHIFT, KK_SYM, KK_SYM2, KK_LANG, KK_EMOJI, KK_ABC, KK_BKSP, KK_ENTER, KK_SPACE, KK_HIDE, KK_TAB,
+	KK_CTRL
 };
 
 struct key {
@@ -301,6 +302,7 @@ build_keymap(void)
 #define SPACE {"space", KK_SPACE, 0, 0, false, 3.0f, {0}}
 #define HIDE {"v", KK_HIDE, 0, 0, false, 1.0f, {0}}
 #define TABK {"tab", KK_TAB, 0, 0, false, 1.3f, {0}}
+#define CTRLK {"ctl", KK_CTRL, 0, 0, false, 1.2f, {0}}
 #define SYMK {"?123", KK_SYM, 0, 0, false, 1.5f, {0}}
 #define SYM2K {"#+=", KK_SYM2, 0, 0, false, 1.5f, {0}}
 #define ABCK {"ABC", KK_ABC, 0, 0, false, 1.5f, {0}}
@@ -316,7 +318,7 @@ static struct key g_en[4][ROWMAX] = {
 	 K0("j", KEY_J), K0("k", KEY_K), K0("l", KEY_L), END},
 	{SHIFT, K0("z", KEY_Z), K0("x", KEY_X), K0("c", KEY_C), K0("v", KEY_V), K0("b", KEY_B), K0("n", KEY_N),
 	 K0("m", KEY_M), BKSP, END},
-	{SYMK, LANGK, EMOK, TABK, SPACE, K0(",", KEY_COMMA), K0(".", KEY_DOT), ENTER, HIDE, END},
+	{SYMK, LANGK, CTRLK, TABK, SPACE, K0(",", KEY_COMMA), K0(".", KEY_DOT), ENTER, HIDE, END},
 };
 
 static struct key g_ru[4][ROWMAX] = {
@@ -327,7 +329,7 @@ static struct key g_ru[4][ROWMAX] = {
 	 K1("о", KEY_J), K1("л", KEY_K), K1("д", KEY_L), K1("ж", KEY_SEMICOLON), K1("э", KEY_APOSTROPHE), END},
 	{SHIFT, K1("я", KEY_Z), K1("ч", KEY_X), K1("с", KEY_C), K1("м", KEY_V), K1("и", KEY_B), K1("т", KEY_N),
 	 K1("ь", KEY_M), K1("б", KEY_COMMA), K1("ю", KEY_DOT), BKSP, END},
-	{SYMK, LANGK, EMOK, TABK, SPACE, K0(",", KEY_COMMA), K0(".", KEY_DOT), ENTER, HIDE, END},
+	{SYMK, LANGK, CTRLK, TABK, SPACE, K0(",", KEY_COMMA), K0(".", KEY_DOT), ENTER, HIDE, END},
 };
 
 static struct key g_sym[4][ROWMAX] = {
@@ -413,6 +415,7 @@ struct ng_osk {
 	enum layer letter; /* LY_EN or LY_RU - what ?123 / emoji return to */
 	bool shift;
 	bool caps;         /* caps-lock: shift stays on (double-tap shift) */
+	bool ctrl;         /* one-shot: next KK_CHAR is sent as a Ctrl-chord */
 	uint32_t last_shift;
 	bool visible;
 
@@ -519,6 +522,26 @@ osk_send(struct ng_osk *osk, uint16_t code, bool shift, uint8_t group)
 {
 	osk_key_down(osk, code, shift, group);
 	osk_key_up(osk);
+}
+
+#define MOD_CTRL 0x4u /* xkbcommon default "Control" real-mod bit */
+
+/* a discrete tap with modifier real-mods held (e.g. Ctrl+C in the TUI) */
+static void
+osk_send_mod(struct ng_osk *osk, uint16_t code, uint32_t mods)
+{
+	if (!osk->kb_ready)
+		return;
+	struct wlr_seat *seat = osk->server->seat->seat;
+	wlr_seat_set_keyboard(seat, &osk->kb);
+	wlr_keyboard_notify_modifiers(&osk->kb, mods, 0, 0, 0);
+	wlr_seat_keyboard_notify_modifiers(seat, &osk->kb.modifiers);
+	raw_key(osk, code, true);
+	raw_key(osk, code, false);
+	wlr_keyboard_notify_modifiers(&osk->kb, 0, 0, 0, 0);
+	wlr_seat_keyboard_notify_modifiers(seat, &osk->kb.modifiers);
+	osk->held_code = 0;
+	wlr_idle_notifier_v1_notify_activity(osk->server->idle, seat);
 }
 
 /* -- rendering ----------------------------------------------------------- */
@@ -698,7 +721,8 @@ osk_render(struct ng_osk *osk)
 			k->box = (struct wlr_box){(int) x + osk->area.x, y + osk->area.y, kw, rowh};
 			struct wlr_box local = {(int) x, y, kw, rowh};
 
-			bool hot = (k->kind == KK_SHIFT && osk->shift) || (k->kind == KK_LANG && osk->layer == LY_RU);
+			bool hot = (k->kind == KK_SHIFT && osk->shift) || (k->kind == KK_LANG && osk->layer == LY_RU) ||
+				   (k->kind == KK_CTRL && osk->ctrl);
 			bool down = (k == osk->pressed);
 			fill_rr(data, W, H, local, krad, down ? 0.42f : hot ? 0.30f : 0.13f);
 
@@ -716,6 +740,8 @@ osk_render(struct ng_osk *osk)
 				lbl = (osk->layer == LY_RU) ? "RU" : "EN";
 			else if (k->kind == KK_EMOJI)
 				lbl = ":)";
+			else if (k->kind == KK_CTRL)
+				lbl = osk->ctrl ? "CTL" : "ctl";
 			else if (k->kind == KK_SPACE)
 				lbl = "";
 			draw_label(data, W, H, font, lbl, local, 0.92f);
@@ -1109,6 +1135,11 @@ ng_osk_press(struct ng_osk *osk, double lx, double ly)
 	osk->pressed = k;
 	switch (k->kind) {
 	case KK_CHAR: {
+		if (osk->ctrl) { /* one-shot Ctrl-chord: skip accents/repeat */
+			osk_send_mod(osk, k->code, MOD_CTRL);
+			osk->ctrl = false;
+			break;
+		}
 		bool sh = k->shift || (osk->layer == LY_EN && osk->shift);
 		if (key_alts(osk->layer, k))
 			osk_arm_hold(osk, k); /* accent-capable: commit on release */
@@ -1161,9 +1192,14 @@ ng_osk_press(struct ng_osk *osk, double lx, double ly)
 	case KK_EMOJI:
 		osk->layer = LY_EMOJI;
 		break;
+	case KK_CTRL:
+		osk->ctrl = !osk->ctrl; /* one-shot; consumed by the next char */
+		break;
 	case KK_HIDE:
 		break; /* acts on release */
 	}
+	if (osk->ctrl && k->kind != KK_CTRL && k->kind != KK_CHAR)
+		osk->ctrl = false; /* don't leave Ctrl armed across a mode switch */
 	osk_render(osk);
 	return true;
 }
