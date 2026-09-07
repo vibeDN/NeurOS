@@ -70,17 +70,21 @@ at the user's request - only the code agent remains.)
 Boots at 1080x2400, pixman renderer. Screenshots: Claude Code running in the
 centre pane; OSK long-press accents (`e`->è é ê ë), globe->layout picker
 (EN/RU/?12/:)), symbol alts (`-`->– —); settings overlay. `scripts/qemu-phone.sh`.
-OSK `ctl` key added since - compiles + links clean, not yet re-verified in the VM
-(pending the wpewebkit build finishing so the image can be repacked).
+OSK `ctl` key verified in the VM 2026-09-07: tap `ctl` (label -> `CTL`, lit) then
+`c` -> Claude Code prints "Press Ctrl-C again to exit", modifier auto-disarms.
+Same rebuild ships the web stack (`cog --version` -> 0.18.5 / WPE WebKit 2.50.5,
+`WPEWebDriver`, both cog platform modules).
 
 ## Current blockers / TODO
 
 - **Dev host migrated Gentoo -> Debian 13** - full `output/` rebuild done and
   working. See `docs/DEBIAN-MIGRATION.md`.
-- **`wpewebkit`** (`fa3858f`, WIP browser) - `FindRuby` fixed (install `ruby`);
-  the WebCore compile OOM'd a 16 GB box at `BR2_JLEVEL=6`. Retrying now with
-  40 GB swap (`/home/chatgpt/coding/.swapfile`) at `BR2_JLEVEL=6`, monitored.
-  Re-enabled in `output/.config` for the attempt.
+- **`wpewebkit` + `cog`** - now build end to end and ship in the image.
+  `FindRuby` needs host `ruby`; WebCore OOM-kills at `BR2_JLEVEL=6` (harness RAM
+  watchdog, not kernel OOM - swap doesn't help) so build at `BR2_JLEVEL<=3`;
+  `BR2_PACKAGE_CAIRO=y` is required for cog's wayland platform (`c34df2a`).
+  Still open: gstreamer/`<video>`, the WebKit sandbox, and the `neuros-web`
+  WebDriver runtime path (drives cog headless - not yet smoke-tested live).
 - **Real Claude Code** in the image (Node + auth) - `mock-agent` stands in.
 - **`ext-session-lock-v1`** - deferred (input is already contained).
 - Live-mic capture, camera `/dev/video0`, erofs ro-root + f2fs data - all still open.
