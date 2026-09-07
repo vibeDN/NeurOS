@@ -104,10 +104,14 @@ BR2_STRIP_EXCLUDE_FILES="claude"
 # NeurOS compositor. WebKitWebDriver (W3C) + the WebKit remote inspector give
 # the agent DOM / click / type / screenshot on the SAME instance the user sees.
 # multimedia (gstreamer) + sandbox deferred - v1 has no <video>/<audio>.
+# Build note: wpewebkit's WebCore compile OOM-kills at high -j (the harness
+# watchdog trips on low free RAM, swap doesn't help) - build with BR2_JLEVEL<=3.
 BR2_PACKAGE_WPEWEBKIT=y
 BR2_PACKAGE_WPEWEBKIT_WEBDRIVER=y
 BR2_PACKAGE_COG=y
 BR2_PACKAGE_COG_PROGRAMS_HOME_URI=""
+# cog's wayland platform (libcogplatform-wl) needs cairo; not auto-selected
+BR2_PACKAGE_CAIRO=y
 # neuros-web talks W3C WebDriver over HTTP (needs real verbs: POST/GET/DELETE)
 BR2_PACKAGE_LIBCURL=y
 BR2_PACKAGE_LIBCURL_CURL=y
