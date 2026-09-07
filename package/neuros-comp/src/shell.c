@@ -1028,6 +1028,12 @@ ng_shell_layout(struct ng_shell *shell, int width, int height)
 	int dots_h = height / 44;
 	int pane_h = height * 175 / 1000;
 
+	/* while the on-screen keyboard is up, drop the state pane (it's hidden behind
+	 * the OSK anyway) and run the centre pane straight down to the keyboard. The
+	 * top pane / centre origin stay put so the client never has to reflow up. */
+	int osk_up = shell->server && shell->server->osk && ng_osk_is_visible(shell->server->osk);
+	int osk_top = osk_up ? ng_osk_top(shell->server->osk) : height;
+
 	int x = margin, w = width - 2 * margin, y = margin;
 
 	shell->strip_box = (struct wlr_box){x + rad / 2, y, w - rad, strip_h};
@@ -1051,13 +1057,19 @@ ng_shell_layout(struct ng_shell *shell, int width, int height)
 	shell->top_box = (struct wlr_box){x, y, w, pane_h};
 	y += pane_h + gap;
 
-	int bottom_y = height - margin - pane_h - height / 40; /* leave room for home bar */
 	int center_y = y;
-	int center_h = bottom_y - gap - center_y;
+	int bottom_y = height - margin - pane_h - height / 40; /* room for home bar */
+	int center_h;
+	if (osk_up) {
+		shell->bottom_box = (struct wlr_box){x, bottom_y, 0, 0}; /* hidden by the OSK */
+		center_h = osk_top - gap - center_y;
+	} else {
+		shell->bottom_box = (struct wlr_box){x, bottom_y, w, pane_h};
+		center_h = bottom_y - gap - center_y;
+	}
 	if (center_h < 40)
 		center_h = 40;
 	shell->center_box = (struct wlr_box){x, center_y, w, center_h};
-	shell->bottom_box = (struct wlr_box){x, bottom_y, w, pane_h};
 
 	int glow = rad * 3 / 4;
 	float acc[3] = {shell->top_color[0], shell->top_color[1], shell->top_color[2]};
@@ -1070,9 +1082,12 @@ ng_shell_layout(struct ng_shell *shell, int width, int height)
 	node_set(shell->center_panel,
 		 ng_panel_render_ex(shell->center_box.width, shell->center_box.height, rad, 1, acc, glow),
 		 shell->center_box.x - glow, shell->center_box.y - glow);
-	node_set(shell->bottom_panel,
-		 ng_panel_render_ex(shell->bottom_box.width, shell->bottom_box.height, rad, 0, acc, glow),
-		 shell->bottom_box.x - glow, shell->bottom_box.y - glow);
+	if (osk_up)
+		node_set(shell->bottom_panel, NULL, 0, 0);
+	else
+		node_set(shell->bottom_panel,
+			 ng_panel_render_ex(shell->bottom_box.width, shell->bottom_box.height, rad, 0, acc, glow),
+			 shell->bottom_box.x - glow, shell->bottom_box.y - glow);
 
 	/* top pane: agent name, with the model line tucked under it when set */
 	int has_model = shell->model_text && shell->model_text[0];
