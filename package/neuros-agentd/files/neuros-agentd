@@ -11,22 +11,10 @@ set -u
 CONF=/etc/neuros/agentd.conf
 [ -r "$CONF" ] && . "$CONF"
 : "${AGENT_NAME:=Agent}"
+: "${AGENT_CMD:=/usr/lib/neuros/mock-agent}"
 : "${AGENT_USER:=}"
 : "${AGENT_WORKDIR:=/root}"
 : "${TMUX_SESSION:=agent}"
-
-# resolve the agent command from the mode (unless AGENT_CMD is pinned). The
-# live mode is /run/neuros/mode (set by neuros-mode), falling back to the conf.
-if [ -z "${AGENT_CMD:-}" ]; then
-	m=$(cat /run/neuros/mode 2>/dev/null)
-	: "${m:=${AGENT_MODE:-code}}"
-	case "$m" in
-	chat) AGENT_CMD="${CHAT_CMD:-neuros-chat}"; AGENT_MODEL="${CHAT_MODEL:-chat}" ;;
-	*)    AGENT_CMD="${CODE_CMD:-claude}";      AGENT_MODEL="${CODE_MODEL:-Sonnet 5}" ;;
-	esac
-	mkdir -p /run/neuros && printf '%s\n' "$m" > /run/neuros/mode
-fi
-: "${AGENT_CMD:=/usr/lib/neuros/mock-agent}"
 
 RT="${XDG_RUNTIME_DIR:-/run/user/0}/neuros"
 mkdir -p "$RT"

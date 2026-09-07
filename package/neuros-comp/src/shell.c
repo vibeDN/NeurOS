@@ -53,7 +53,7 @@ static const float DEFAULT_TOP[4] = {0.851f, 0.463f, 0.341f, 1.0f};
 static const float DEFAULT_BOTTOM[4] = {0.290f, 0.141f, 0.082f, 1.0f};
 
 /* fire-and-forget a shell command (double-fork so we don't leave zombies) */
-void
+static void
 ng_spawn(const char *cmd)
 {
 	pid_t pid = fork();

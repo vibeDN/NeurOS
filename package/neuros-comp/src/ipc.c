@@ -109,10 +109,6 @@ handle_line(struct ng_ipc *ipc, char *line)
 		if (arg && strcmp(arg, "toggle") == 0)
 			want = !ng_shell_settings_is_open(shell);
 		ng_shell_settings_menu(shell, want);
-	} else if (strcmp(line, "mode") == 0) {
-		char cmd[64];
-		snprintf(cmd, sizeof(cmd), "neuros-mode %s", (arg && *arg) ? arg : "toggle");
-		ng_spawn(cmd);
 	} else if (strcmp(line, "camera") == 0) {
 		if (arg && strcmp(arg, "toggle") == 0)
 			ng_shell_set_camera(shell, !ng_shell_is_camera(shell));
