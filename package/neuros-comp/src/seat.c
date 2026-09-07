@@ -356,6 +356,16 @@ hw_spawn(const char *cmd)
 	}
 }
 
+/* the deferred single-tap of Power: no second tap came, so it's a screen toggle */
+static int
+pwr_tap_cb(void *data)
+{
+	struct cg_seat *seat = data;
+	seat->pwr_tap_pending = false;
+	hw_spawn("neuros-screen toggle");
+	return 0;
+}
+
 /* KEY_POWER=116  KEY_VOLUMEDOWN=114  KEY_VOLUMEUP=115 */
 static int
 hw_index(uint32_t code)
@@ -404,7 +414,26 @@ handle_hw_key(struct cg_seat *seat, struct wlr_keyboard_key_event *event)
 	bool lng = dur >= LONG;
 	switch (i) {
 	case 0: /* power */
-		hw_spawn(lng ? "neuros-ctl power" : "neuros-screen toggle");
+		if (lng) {
+			seat->pwr_tap_pending = false;
+			if (seat->pwr_tap_timer)
+				wl_event_source_timer_update(seat->pwr_tap_timer, 0);
+			hw_spawn("neuros-ctl power");
+		} else if (seat->pwr_tap_pending) {
+			/* second short tap within the window -> double tap = Esc */
+			seat->pwr_tap_pending = false;
+			if (seat->pwr_tap_timer)
+				wl_event_source_timer_update(seat->pwr_tap_timer, 0);
+			hw_spawn("neuros-key Escape");
+		} else {
+			/* first short tap: defer the screen toggle to see if a 2nd comes */
+			seat->pwr_tap_pending = true;
+			if (!seat->pwr_tap_timer && seat->server && seat->server->wl_display)
+				seat->pwr_tap_timer = wl_event_loop_add_timer(
+					wl_display_get_event_loop(seat->server->wl_display), pwr_tap_cb, seat);
+			if (seat->pwr_tap_timer)
+				wl_event_source_timer_update(seat->pwr_tap_timer, 320);
+		}
 		break;
 	case 1: /* vol- */
 		hw_spawn(lng ? "neuros-tts toggle" : "neuros-vol down");
@@ -1143,6 +1172,9 @@ seat_destroy(struct cg_seat *seat)
 	if (!seat) {
 		return;
 	}
+
+	if (seat->pwr_tap_timer)
+		wl_event_source_remove(seat->pwr_tap_timer);
 
 	wl_list_remove(&seat->request_start_drag.link);
 	wl_list_remove(&seat->start_drag.link);

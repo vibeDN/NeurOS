@@ -32,7 +32,9 @@
 #include "textbuf.h"
 
 enum layer { LY_EN, LY_RU, LY_SYM, LY_SYM2, LY_EMOJI };
-enum kk { KK_CHAR, KK_SHIFT, KK_SYM, KK_SYM2, KK_LANG, KK_EMOJI, KK_ABC, KK_BKSP, KK_ENTER, KK_SPACE, KK_HIDE };
+enum kk {
+	KK_CHAR, KK_SHIFT, KK_SYM, KK_SYM2, KK_LANG, KK_EMOJI, KK_ABC, KK_BKSP, KK_ENTER, KK_SPACE, KK_HIDE, KK_TAB
+};
 
 struct key {
 	const char *lbl;     /* display (UTF-8) */
@@ -296,8 +298,9 @@ build_keymap(void)
 #define SHIFT {"shift", KK_SHIFT, 0, 0, false, 1.5f, {0}}
 #define BKSP {"del", KK_BKSP, 0, 0, false, 1.5f, {0}}
 #define ENTER {"ret", KK_ENTER, 0, 0, false, 1.7f, {0}}
-#define SPACE {"space", KK_SPACE, 0, 0, false, 4.0f, {0}}
+#define SPACE {"space", KK_SPACE, 0, 0, false, 3.0f, {0}}
 #define HIDE {"v", KK_HIDE, 0, 0, false, 1.0f, {0}}
+#define TABK {"tab", KK_TAB, 0, 0, false, 1.3f, {0}}
 #define SYMK {"?123", KK_SYM, 0, 0, false, 1.5f, {0}}
 #define SYM2K {"#+=", KK_SYM2, 0, 0, false, 1.5f, {0}}
 #define ABCK {"ABC", KK_ABC, 0, 0, false, 1.5f, {0}}
@@ -313,7 +316,7 @@ static struct key g_en[4][ROWMAX] = {
 	 K0("j", KEY_J), K0("k", KEY_K), K0("l", KEY_L), END},
 	{SHIFT, K0("z", KEY_Z), K0("x", KEY_X), K0("c", KEY_C), K0("v", KEY_V), K0("b", KEY_B), K0("n", KEY_N),
 	 K0("m", KEY_M), BKSP, END},
-	{SYMK, LANGK, EMOK, SPACE, K0(",", KEY_COMMA), K0(".", KEY_DOT), ENTER, HIDE, END},
+	{SYMK, LANGK, EMOK, TABK, SPACE, K0(",", KEY_COMMA), K0(".", KEY_DOT), ENTER, HIDE, END},
 };
 
 static struct key g_ru[4][ROWMAX] = {
@@ -324,7 +327,7 @@ static struct key g_ru[4][ROWMAX] = {
 	 K1("о", KEY_J), K1("л", KEY_K), K1("д", KEY_L), K1("ж", KEY_SEMICOLON), K1("э", KEY_APOSTROPHE), END},
 	{SHIFT, K1("я", KEY_Z), K1("ч", KEY_X), K1("с", KEY_C), K1("м", KEY_V), K1("и", KEY_B), K1("т", KEY_N),
 	 K1("ь", KEY_M), K1("б", KEY_COMMA), K1("ю", KEY_DOT), BKSP, END},
-	{SYMK, LANGK, EMOK, SPACE, K0(",", KEY_COMMA), K0(".", KEY_DOT), ENTER, HIDE, END},
+	{SYMK, LANGK, EMOK, TABK, SPACE, K0(",", KEY_COMMA), K0(".", KEY_DOT), ENTER, HIDE, END},
 };
 
 static struct key g_sym[4][ROWMAX] = {
@@ -434,7 +437,7 @@ struct ng_osk {
 
 	/* space-bar cursor control: hold space, drag to move the caret */
 	bool space_cursor;
-	double space_anchor; /* lx the last arrow key was sent at */
+	double space_anchor, space_anchor_y; /* where the last arrow key was sent */
 };
 
 static const struct wlr_keyboard_impl kb_impl = {.name = "neuros-osk"};
@@ -990,6 +993,7 @@ osk_hold_cb(void *data)
 	if (k->kind == KK_SPACE) {
 		osk->space_cursor = true; /* now a caret trackpad; drag -> arrows */
 		osk->space_anchor = osk->press_lx;
+		osk->space_anchor_y = osk->press_ly;
 	} else if (k->kind == KK_LANG) {
 		osk_open_layout_popup(osk, k);
 	} else {
@@ -1036,7 +1040,8 @@ ng_osk_motion(struct ng_osk *osk, double lx, double ly)
 		return;
 	}
 	if (osk->space_cursor) {
-		/* drag the space bar -> nudge the caret one char per ~half-key */
+		/* drag the space bar -> caret: L/R one char per ~half-key, U/D one
+		 * line per ~row-height (Claude Code scrolls its history with up/down) */
 		int step = osk->area.width / 22;
 		if (step < 8)
 			step = 8;
@@ -1047,6 +1052,17 @@ ng_osk_motion(struct ng_osk *osk, double lx, double ly)
 		while (osk->space_anchor - lx >= step) {
 			osk_send(osk, KEY_LEFT, false, 0);
 			osk->space_anchor -= step;
+		}
+		int stepy = osk->area.height / 12;
+		if (stepy < 14)
+			stepy = 14;
+		while (ly - osk->space_anchor_y >= stepy) {
+			osk_send(osk, KEY_DOWN, false, 0);
+			osk->space_anchor_y += stepy;
+		}
+		while (osk->space_anchor_y - ly >= stepy) {
+			osk_send(osk, KEY_UP, false, 0);
+			osk->space_anchor_y -= stepy;
 		}
 		return;
 	}
@@ -1109,6 +1125,13 @@ ng_osk_press(struct ng_osk *osk, double lx, double ly)
 	case KK_ENTER:
 		osk_send(osk, KEY_ENTER, false, 0); /* discrete - no repeat on return */
 		break;
+	case KK_TAB: {
+		bool sh = osk->shift; /* shift+tab = Claude Code's mode cycle */
+		osk_send(osk, KEY_TAB, sh, 0);
+		if (sh && !osk->caps)
+			osk->shift = false;
+		break;
+	}
 	case KK_SHIFT: {
 		uint32_t t = now_ms();
 		if (osk->caps) {

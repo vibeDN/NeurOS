@@ -1,0 +1,8 @@
+#!/bin/sh
+# Send a key or key-sequence to the agent's terminal (the "agent" tmux session).
+# Used by the compositor's hardware-key handler, e.g. `neuros-key Escape` on a
+# double-tap of Power. Accepts anything `tmux send-keys` does: Escape, Tab, C-c,
+# BSpace, Up, "some literal text", ...
+export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/0}"
+tmux has-session -t agent 2>/dev/null || exit 0
+exec tmux send-keys -t agent "$@"

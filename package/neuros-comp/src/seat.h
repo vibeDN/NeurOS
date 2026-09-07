@@ -32,6 +32,9 @@ struct cg_seat {
 	uint32_t hwkey_down_ms[3];
 	bool hwkey_held[3];
 	bool hwkey_combo; /* a combo already fired this hold */
+	/* power: single tap is deferred ~320ms so a double tap can pre-empt it (-> Esc) */
+	struct wl_event_source *pwr_tap_timer;
+	bool pwr_tap_pending;
 
 	struct wlr_cursor *cursor;
 	struct wlr_xcursor_manager *xcursor_manager;
