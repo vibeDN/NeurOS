@@ -1,10 +1,33 @@
 #!/bin/sh
 # NeurOS "chat" mode: the same Claude Code binary (so the same OAuth login and
-# the same TTS Stop hook), but with a plain conversational system prompt and no
-# tools - a talking assistant, not a coding agent. `neuros-mode` picks this vs
-# `claude` for the tmux pane.
-exec claude \
+# the same TTS Stop hook) but isolated from the coding agent:
+#   --setting-sources ""  : no user/project/local settings -> no ~/.claude/CLAUDE.md,
+#                           no auto-memory, no settings-defined hooks, no CLAUDE.md
+#                           auto-discovery
+#   --system-prompt-file  : replaces the whole system prompt with the chat persona
+#   --tools ""            : no shell / file / web access at all
+#   a chat-only session id (kept in /run: survives a mode toggle, fresh per boot)
+#     so the chat thread never mixes with the code sessions
+# `neuros-mode` picks this vs plain `claude` for the tmux pane.
+set -u
+
+SIDF=/run/neuros/chat-sid
+mkdir -p /run/neuros 2>/dev/null || true
+[ -s "$SIDF" ] || cat /proc/sys/kernel/random/uuid > "$SIDF" 2>/dev/null
+SID=$(cat "$SIDF" 2>/dev/null)
+
+set -- \
 	--system-prompt-file /usr/share/neuros/chat-prompt.txt \
 	--tools "" \
+	--setting-sources "" \
 	--permission-mode dontAsk \
 	"$@"
+
+if [ -n "$SID" ] && [ -e "$SIDF.open" ]; then
+	set -- --resume "$SID" "$@"      # continue this boot's chat thread
+elif [ -n "$SID" ]; then
+	: > "$SIDF.open"
+	set -- --session-id "$SID" "$@"  # open it
+fi
+
+exec claude "$@"
