@@ -96,12 +96,15 @@ func obj(props map[string]any, required ...string) map[string]any {
 }
 func str(desc string) map[string]any { return map[string]any{"type": "string", "description": desc} }
 
-const layout = "Memory is organised in three folders, one .md file per entry:\n" +
+const layout = "Memory is organised in four folders, one .md file per entry:\n" +
 	"  you/<x>     - stable facts about the user: name, routine, people, long-term preferences\n" +
 	"  topics/<x>  - recurring interests/habits, one file per subject (food, work, hobbies...)\n" +
-	"  area/<x>    - an ongoing project or situation with a clear end state (a trip, a repair, a goal)"
+	"  area/<x>    - an ongoing project or situation with a clear end state (a trip, a repair, a goal)\n" +
+	"  blog/<x>    - the neuroblog persona's journal (imported from the old Claudeproject vault):\n" +
+	"                Telegram chat history, running gags, people, tech quirks. Sub-folders\n" +
+	"                blog/journal/<date>, blog/people/<id>, blog/threads/<x>; start from blog/index"
 
-var folders = []string{"you", "topics", "area"}
+var folders = []string{"you", "topics", "area", "blog"}
 
 var tools = []toolDef{
 	{"memory_list", "List every memory entry, grouped by folder, with its one-line summary and last-updated date. Call this at the start of a task.\n\n" + layout,
@@ -110,8 +113,8 @@ var tools = []toolDef{
 		obj(map[string]any{"query": str("text to search for")}, "query")},
 	{"memory_read", "Return the full contents of one memory entry.",
 		obj(map[string]any{"path": str("entry name, e.g. you/name or topics/food")}, "path")},
-	{"memory_write", "Create or overwrite one memory entry. The path MUST be under you/, topics/ or area/ - you choose which based on the layout below. Add to an existing entry rather than making near-duplicates (memory_read it first). Only write facts that would still matter in a month.\n\n" + layout + "\n\nEach file: a short '--- name / summary / updated ---' frontmatter, then bullet facts. Cross-link with [[you/name]].",
-		obj(map[string]any{"path": str("you/<x> | topics/<x> | area/<x>"), "content": str("full entry text")}, "path", "content")},
+	{"memory_write", "Create or overwrite one memory entry. The path MUST be under you/, topics/, area/ or blog/ - you choose which based on the layout below. Add to an existing entry rather than making near-duplicates (memory_read it first). Only write facts that would still matter in a month.\n\n" + layout + "\n\nEach file: a short '--- name / summary / updated ---' frontmatter, then bullet facts. Cross-link with [[you/name]].",
+		obj(map[string]any{"path": str("you/<x> | topics/<x> | area/<x> | blog/<x>"), "content": str("full entry text")}, "path", "content")},
 	{"memory_delete", "Delete a memory entry that is no longer true or relevant.",
 		obj(map[string]any{"path": str("entry name")}, "path")},
 }
@@ -321,7 +324,7 @@ func callToolLocal(name string, raw json.RawMessage) (string, error) {
 	case "memory_list":
 		files := mdFiles()
 		if len(files) == 0 {
-			return "(memory is empty - files go under you/, topics/ or area/)", nil
+			return "(memory is empty - files go under you/, topics/, area/ or blog/)", nil
 		}
 		grp := map[string][]string{}
 		for _, f := range files {
@@ -349,7 +352,7 @@ func callToolLocal(name string, raw json.RawMessage) (string, error) {
 			grp[top] = append(grp[top], row)
 		}
 		var b strings.Builder
-		for _, k := range []string{"you", "topics", "area"} {
+		for _, k := range []string{"you", "topics", "area", "blog"} {
 			if len(grp[k]) > 0 {
 				fmt.Fprintf(&b, "%s/\n%s\n", k, strings.Join(grp[k], "\n"))
 				delete(grp, k)
@@ -404,7 +407,7 @@ func callToolLocal(name string, raw json.RawMessage) (string, error) {
 			}
 		}
 		if !ok {
-			return "", fmt.Errorf("entry must be under you/, topics/ or area/  (e.g. topics/food)")
+			return "", fmt.Errorf("entry must be under you/, topics/, area/ or blog/  (e.g. topics/food)")
 		}
 		full, err := safePath(a.Path)
 		if err != nil {

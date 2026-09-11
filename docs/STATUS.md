@@ -49,7 +49,9 @@ gated on the bootloader unlock (see the `sweet BL unlock` memory).
 One memory used by every Claude the user has (claude.ai, desktop Claude Code,
 the device). Canonical host is an always-on Cloudflare Worker
 (`neuros-memory.fokus2082.workers.dev`, KV-backed) exposing `memory_*` MCP tools
-+ a browsable `you/topics/area` UI with `[[link]]` resolution. On the device,
++ a browsable `you/topics/area` UI with `[[link]]` resolution (plus a `blog/`
+folder that belongs to a separate assistant persona sharing the same store).
+On the device,
 `neuros-memory-mcp` (127.0.0.1:8790) is a read-through / write-behind cache in
 front of it - works offline, flushes a `.pending` queue on reconnect, mirrors
 reads to `/home/claude/memory`. Full design in `docs/SHARED-MEMORY.md`;

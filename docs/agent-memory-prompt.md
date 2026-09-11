@@ -23,7 +23,7 @@ through an on-device cache that syncs to the shared store; they work offline
 and reconcile when the network returns. If the tools are not present, the
 same entries are plain files under /home/<agent>/memory/.
 
-Entries are organized in three folders, one .md file per entry:
+Entries are organized in folders, one .md file per entry:
 
 - you/<x>       — stable facts about the user: name, routine, people
                    in their life, long-term preferences.
@@ -31,6 +31,10 @@ Entries are organized in three folders, one .md file per entry:
                    (food, hobbies, work...).
 - area/<x>      — ongoing projects or situations with a clear
                    end state (trip planning, a repair, a goal).
+
+Write only into you/, topics/ or area/ — other folders (e.g. blog/) belong to
+a different assistant persona sharing this store; read them if relevant, but
+don't file NeurOS entries there.
 
 `memory_write` requires the folder prefix (e.g. `topics/food`). Each entry:
 ---

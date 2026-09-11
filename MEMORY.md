@@ -18,14 +18,17 @@ user decision) — recommended to still keep a basic guard against the most
 obviously destructive shell commands as a backstop, not full sandboxing.
 
 ## Memory
-`/home/<agent>/memory/{you,topics,area}/*.md` — **isolated per agent**, with an
+`/home/<agent>/memory/{you,topics,area,blog}/*.md` — **isolated per agent**, with an
 explicit cross-read escape hatch: an agent can read another agent's memory
 dir only when the user explicitly asks for it (tool granted on-demand, not in
 default toolset).
 
 Structure mirrors: `/you/*.md` (stable identity facts), `/topics/<x>.md`
 (recurring habits/preferences — 2nd-mention rule, don't file on first passing
-mention), `/area/<x>.md` (ongoing projects). Frontmatter: name/summary/updated.
+mention), `/area/<x>.md` (ongoing projects), `/blog/<x>.md` (the neuroblog
+persona's journal — TG chat history, people, running gags; sub-folders
+`blog/journal/<date>`, `blog/people/<id>`, `blog/threads/<x>`). Frontmatter:
+name/summary/updated.
 Write trigger: NOT mid-conversation — either an incremental session-log
 checkpoint (crash-safe) processed into memory at next boot, or explicit
 `/exit`. Explicit "remember this" writes immediately.
